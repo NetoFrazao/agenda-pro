@@ -22,6 +22,16 @@ const envSchema = z.object({
   PLAN_STARTER_PRICE_CENTS: z.coerce.number().int().nonnegative().default(0),
   PLAN_PRO_PRICE_CENTS: z.coerce.number().int().nonnegative().default(4990),
   PLAN_BUSINESS_PRICE_CENTS: z.coerce.number().int().nonnegative().default(9990),
+  STRIPE_SECRET_KEY: z.string().optional().default(''),
+  STRIPE_WEBHOOK_SECRET: z.string().optional().default(''),
+  STRIPE_PRICE_STARTER: z.string().optional().default(''),
+  STRIPE_PRICE_PRO: z.string().optional().default(''),
+  STRIPE_PRICE_BUSINESS: z.string().optional().default(''),
+  SMTP_HOST: z.string().optional().default(''),
+  SMTP_PORT: z.coerce.number().int().positive().default(587),
+  SMTP_USER: z.string().optional().default(''),
+  SMTP_PASS: z.string().optional().default(''),
+  EMAIL_FROM: z.string().default('Agenda Pro <noreply@agendapro.local>'),
 });
 
 export type EnvVars = z.infer<typeof envSchema>;

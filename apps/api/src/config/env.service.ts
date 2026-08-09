@@ -38,6 +38,51 @@ export class EnvService {
     return this.config.get('JWT_REFRESH_SECRET', { infer: true });
   }
 
+  get jwtAccessTtl() {
+    return this.config.get('JWT_ACCESS_TTL', { infer: true });
+  }
+
+  get jwtRefreshTtl() {
+    return this.config.get('JWT_REFRESH_TTL', { infer: true });
+  }
+
+  get appPublicUrl() {
+    return this.config.get('APP_PUBLIC_URL', { infer: true });
+  }
+
+  get appName() {
+    return this.config.get('APP_NAME', { infer: true });
+  }
+
+  get stripeSecretKey() {
+    return this.config.get('STRIPE_SECRET_KEY', { infer: true });
+  }
+
+  get stripeWebhookSecret() {
+    return this.config.get('STRIPE_WEBHOOK_SECRET', { infer: true });
+  }
+
+  get stripePriceIds() {
+    return {
+      STARTER: this.config.get('STRIPE_PRICE_STARTER', { infer: true }),
+      PRO: this.config.get('STRIPE_PRICE_PRO', { infer: true }),
+      BUSINESS: this.config.get('STRIPE_PRICE_BUSINESS', { infer: true }),
+    } as const;
+  }
+
+  get emailFrom() {
+    return this.config.get('EMAIL_FROM', { infer: true });
+  }
+
+  get smtp() {
+    return {
+      host: this.config.get('SMTP_HOST', { infer: true }),
+      port: this.config.get('SMTP_PORT', { infer: true }),
+      user: this.config.get('SMTP_USER', { infer: true }),
+      pass: this.config.get('SMTP_PASS', { infer: true }),
+    };
+  }
+
   /** Preços placeholder por plano (centavos). Não hardcodar no código de domínio. */
   get planPricesCents() {
     return {

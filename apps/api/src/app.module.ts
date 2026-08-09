@@ -1,16 +1,24 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { APP_GUARD } from '@nestjs/core';
 import { LoggerModule } from 'nestjs-pino';
+import { AccountModule } from './account/account.module';
+import { AppointmentsModule } from './appointments/appointments.module';
+import { AuthModule } from './auth/auth.module';
+import { AvailabilityModule } from './availability/availability.module';
+import { BillingModule } from './billing/billing.module';
 import { EnvModule } from './config/env.module';
-import { HealthModule } from './health/health.module';
-import { PrismaModule } from './prisma/prisma.module';
 import { validateEnv } from './config/env.validation';
+import { HealthModule } from './health/health.module';
+import { NotificationsModule } from './notifications/notifications.module';
+import { PrismaModule } from './prisma/prisma.module';
+import { ServicesModule } from './services/services.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      // Monorepo: tenta .env na raiz e em apps/api
       envFilePath: ['.env', '../../.env'],
       validate: validateEnv,
     }),
@@ -21,7 +29,6 @@ import { validateEnv } from './config/env.validation';
           process.env.NODE_ENV !== 'production'
             ? { target: 'pino-pretty', options: { singleLine: true } }
             : undefined,
-        // Evita logar bodies com dados pessoais (LGPD)
         redact: {
           paths: [
             'req.headers.authorization',
@@ -34,9 +41,28 @@ import { validateEnv } from './config/env.validation';
         },
       },
     }),
+    ThrottlerModule.forRoot([
+      {
+        ttl: 60_000,
+        limit: 120,
+      },
+    ]),
     EnvModule,
     PrismaModule,
     HealthModule,
+    AuthModule,
+    ServicesModule,
+    AvailabilityModule,
+    AppointmentsModule,
+    NotificationsModule,
+    BillingModule,
+    AccountModule,
+  ],
+  providers: [
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
+    },
   ],
 })
 export class AppModule {}
