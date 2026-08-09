@@ -83,6 +83,25 @@ export class EnvService {
     };
   }
 
+  get swaggerEnabled() {
+    return (
+      this.nodeEnv !== 'production' ||
+      this.config.get('SWAGGER_ENABLED', { infer: true }) === 'true'
+    );
+  }
+
+  get evolution() {
+    return {
+      url: this.config.get('EVOLUTION_API_URL', { infer: true }),
+      apiKey: this.config.get('EVOLUTION_API_KEY', { infer: true }),
+      instance: this.config.get('EVOLUTION_INSTANCE', { infer: true }),
+    };
+  }
+
+  get mercadoPagoAccessToken() {
+    return this.config.get('MERCADOPAGO_ACCESS_TOKEN', { infer: true });
+  }
+
   /** Preços placeholder por plano (centavos). Não hardcodar no código de domínio. */
   get planPricesCents() {
     return {

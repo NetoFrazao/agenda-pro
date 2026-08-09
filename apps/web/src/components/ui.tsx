@@ -5,6 +5,7 @@ import type {
   SelectHTMLAttributes,
   TextareaHTMLAttributes,
 } from 'react';
+import { APPOINTMENT_STATUS_LABEL, APPOINTMENT_STATUS_TONE, type BadgeTone } from '@/lib/format';
 
 type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: 'primary' | 'secondary' | 'danger' | 'ghost';
@@ -135,6 +136,92 @@ export function Spinner({ label = 'Carregando…' }: { label?: string }) {
         aria-hidden
       />
       <span>{label}</span>
+    </div>
+  );
+}
+
+const badgeTones: Record<BadgeTone, string> = {
+  emerald: 'bg-emerald-100 text-emerald-900',
+  sky: 'bg-sky-100 text-sky-900',
+  amber: 'bg-amber-100 text-amber-900',
+  red: 'bg-red-100 text-red-900',
+  orange: 'bg-orange-100 text-orange-900',
+  stone: 'bg-stone-200 text-stone-700',
+};
+
+export function Badge({ tone = 'stone', children }: { tone?: BadgeTone; children: ReactNode }) {
+  return (
+    <span
+      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${badgeTones[tone]}`}
+    >
+      {children}
+    </span>
+  );
+}
+
+export function StatusBadge({ status }: { status: string }) {
+  return (
+    <Badge tone={APPOINTMENT_STATUS_TONE[status] ?? 'stone'}>
+      {APPOINTMENT_STATUS_LABEL[status] ?? status}
+    </Badge>
+  );
+}
+
+/** Estrelas somente-leitura (avaliações). */
+export function Stars({ value, size = 'sm' }: { value: number; size?: 'sm' | 'lg' }) {
+  const rounded = Math.round(value);
+  return (
+    <span
+      className={`inline-flex text-amber-500 ${size === 'lg' ? 'text-xl' : 'text-sm'}`}
+      role="img"
+      aria-label={`${value.toLocaleString('pt-BR')} de 5 estrelas`}
+    >
+      {[1, 2, 3, 4, 5].map((n) => (
+        <span key={n} aria-hidden>
+          {n <= rounded ? '★' : '☆'}
+        </span>
+      ))}
+    </span>
+  );
+}
+
+export function Modal({
+  title,
+  onClose,
+  children,
+}: {
+  title: string;
+  onClose: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-label={title}
+    >
+      <button
+        type="button"
+        className="absolute inset-0 cursor-default bg-stone-900/40"
+        onClick={onClose}
+        aria-label="Fechar janela"
+        tabIndex={-1}
+      />
+      <div className="relative max-h-[90vh] w-full max-w-md overflow-y-auto rounded-lg bg-white p-6 shadow-xl">
+        <div className="flex items-start justify-between gap-4">
+          <h2 className="font-display text-lg font-semibold text-stone-900">{title}</h2>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Fechar"
+            className="rounded-md px-2 py-0.5 text-lg leading-none text-stone-500 hover:bg-stone-100 hover:text-stone-900"
+          >
+            ×
+          </button>
+        </div>
+        <div className="mt-4">{children}</div>
+      </div>
     </div>
   );
 }

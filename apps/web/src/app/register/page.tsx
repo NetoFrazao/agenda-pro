@@ -6,7 +6,7 @@ import { FormEvent, useState } from 'react';
 import { BrandLogo } from '@/components/BrandLogo';
 import { Alert, Button, Field, Input } from '@/components/ui';
 import { api, ApiError } from '@/lib/api';
-import { setTokens } from '@/lib/auth';
+import { setSessionFlag } from '@/lib/auth';
 import type { LoginResponse } from '@/lib/types';
 
 function slugify(value: string): string {
@@ -35,7 +35,7 @@ export default function RegisterPage() {
     setError(null);
     setLoading(true);
     try {
-      const data = await api<LoginResponse>('/api/auth/register', {
+      await api<LoginResponse>('/api/auth/register', {
         method: 'POST',
         auth: false,
         body: {
@@ -47,7 +47,8 @@ export default function RegisterPage() {
           timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Sao_Paulo',
         },
       });
-      setTokens(data.accessToken, data.refreshToken);
+      // Sessão fica nos cookies httpOnly; só marcamos o flag de UX.
+      setSessionFlag();
       router.replace('/dashboard');
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Não foi possível criar a conta.');

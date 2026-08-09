@@ -12,11 +12,12 @@
     "test": "jest --passWithNoTests",
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
+    "test:e2e": "jest --config ./test/jest-e2e.json --runInBand",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate deploy",
     "prisma:migrate:dev": "prisma migrate dev",
     "prisma:studio": "prisma studio",
-    "prisma:seed": "tsx prisma/seed.ts"
+    "prisma:seed": "tsx --env-file=.env --env-file=../../.env prisma/seed.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.7",
@@ -32,6 +33,7 @@
     "bullmq": "^6.0.9",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.1",
+    "cookie-parser": "^1.4.7",
     "date-fns": "^4.4.0",
     "date-fns-tz": "^3.2.0",
     "helmet": "^8.0.0",
@@ -52,6 +54,7 @@
     "@nestjs/schematics": "^11.0.0",
     "@nestjs/testing": "^11.0.7",
     "@types/bcryptjs": "^2.4.6",
+    "@types/cookie-parser": "^1.4.10",
     "@types/express": "^5.0.0",
     "@types/jest": "^29.5.14",
     "@types/node": "^22.10.7",

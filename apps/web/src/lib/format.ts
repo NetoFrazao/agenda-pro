@@ -67,3 +67,38 @@ export const APPOINTMENT_STATUS_LABEL: Record<string, string> = {
   CANCELLED: 'Cancelado',
   NO_SHOW: 'Não compareceu',
 };
+
+export type BadgeTone = 'emerald' | 'sky' | 'amber' | 'red' | 'orange' | 'stone';
+
+export const APPOINTMENT_STATUS_TONE: Record<string, BadgeTone> = {
+  PENDING_PAYMENT: 'amber',
+  SCHEDULED: 'sky',
+  CONFIRMED: 'emerald',
+  COMPLETED: 'stone',
+  CANCELLED: 'red',
+  NO_SHOW: 'orange',
+};
+
+/** Fração 0..1 → percentual pt-BR (ex.: 0.083 → "8,3%"). */
+export function formatPercent(rate: number, digits = 1): string {
+  return `${(rate * 100).toLocaleString('pt-BR', {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  })}%`;
+}
+
+/** Link wa.me a partir de um telefone BR (adiciona 55 se faltar). */
+export function whatsappLink(phone: string): string {
+  const digits = phone.replace(/\D/g, '');
+  const full = digits.startsWith('55') ? digits : `55${digits}`;
+  return `https://wa.me/${full}`;
+}
+
+/** Data civil de hoje (YYYY-MM-DD) no fuso do browser. */
+export function todayYmd(): string {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}

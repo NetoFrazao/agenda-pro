@@ -1,28 +1,24 @@
-/** Persistência simples de tokens no localStorage (somente no browser). */
+/**
+ * Sessão baseada em cookies httpOnly (`ap_access`/`ap_refresh`) emitidos pela API.
+ * O browser envia os cookies automaticamente (fetch com credentials: 'include');
+ * aqui guardamos apenas um flag leve de UX em localStorage para saber se vale a
+ * pena renderizar áreas autenticadas. A autoridade real é o cookie: se uma chamada
+ * autenticada falhar com 401 mesmo após refresh, o flag é limpo em lib/api.ts.
+ */
 
-const ACCESS_KEY = 'agenda_pro_access_token';
-const REFRESH_KEY = 'agenda_pro_refresh_token';
+const SESSION_FLAG_KEY = 'agenda_pro_session';
 
-export function getAccessToken(): string | null {
-  if (typeof window === 'undefined') return null;
-  return localStorage.getItem(ACCESS_KEY);
+export function setSessionFlag(): void {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem(SESSION_FLAG_KEY, '1');
 }
 
-export function getRefreshToken(): string | null {
-  if (typeof window === 'undefined') return null;
-  return localStorage.getItem(REFRESH_KEY);
-}
-
-export function setTokens(accessToken: string, refreshToken: string): void {
-  localStorage.setItem(ACCESS_KEY, accessToken);
-  localStorage.setItem(REFRESH_KEY, refreshToken);
-}
-
-export function clearTokens(): void {
-  localStorage.removeItem(ACCESS_KEY);
-  localStorage.removeItem(REFRESH_KEY);
+export function clearSessionFlag(): void {
+  if (typeof window === 'undefined') return;
+  localStorage.removeItem(SESSION_FLAG_KEY);
 }
 
 export function hasSession(): boolean {
-  return Boolean(getAccessToken());
+  if (typeof window === 'undefined') return false;
+  return localStorage.getItem(SESSION_FLAG_KEY) === '1';
 }

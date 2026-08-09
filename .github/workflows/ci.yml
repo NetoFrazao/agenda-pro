@@ -74,3 +74,6 @@ jobs:
 
       - name: Test
         run: npm run test
+
+      - name: E2E (anti double-booking com Postgres real)
+        run: npm run test:e2e -w @agenda-pro/api

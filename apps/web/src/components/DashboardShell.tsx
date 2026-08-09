@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState, type ReactNode } from 'react';
 import { api } from '@/lib/api';
-import { clearTokens, getRefreshToken, hasSession } from '@/lib/auth';
+import { clearSessionFlag, hasSession } from '@/lib/auth';
 import { BrandLogo } from './BrandLogo';
 import { Button, Spinner } from './ui';
 
@@ -13,6 +13,11 @@ const NAV = [
   { href: '/dashboard/services', label: 'Serviços' },
   { href: '/dashboard/availability', label: 'Disponibilidade' },
   { href: '/dashboard/appointments', label: 'Agendamentos' },
+  { href: '/dashboard/reports', label: 'Relatórios' },
+  { href: '/dashboard/clients', label: 'Clientes' },
+  { href: '/dashboard/team', label: 'Equipe' },
+  { href: '/dashboard/waitlist', label: 'Lista de espera' },
+  { href: '/dashboard/reviews', label: 'Avaliações' },
   { href: '/dashboard/billing', label: 'Planos e cobrança' },
   { href: '/dashboard/settings', label: 'Configurações' },
 ];
@@ -54,12 +59,10 @@ export function DashboardShell({ children }: { children: ReactNode }) {
   async function handleLogout() {
     setLoggingOut(true);
     try {
-      const refreshToken = getRefreshToken();
-      if (refreshToken) {
-        await api('/api/auth/logout', { method: 'POST', body: { refreshToken } }).catch(() => null);
-      }
+      // O cookie ap_refresh identifica a sessão; o backend revoga e limpa cookies.
+      await api('/api/auth/logout', { method: 'POST', body: {} }).catch(() => null);
     } finally {
-      clearTokens();
+      clearSessionFlag();
       router.replace('/login');
     }
   }

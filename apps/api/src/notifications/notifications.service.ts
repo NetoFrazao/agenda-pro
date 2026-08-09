@@ -1,15 +1,25 @@
 import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
-import { NotificationChannel, NotificationJobStatus, NotificationJobType } from '@prisma/client';
+import {
+  NotificationChannel,
+  NotificationJobStatus,
+  NotificationJobType,
+  Prisma,
+} from '@prisma/client';
 import { Queue, Worker, type Job } from 'bullmq';
 import * as nodemailer from 'nodemailer';
 import { EnvService } from '../config/env.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { WhatsAppProvider } from './whatsapp.provider';
 
 const QUEUE_NAME = 'notifications';
 
 type NotificationJobPayload = {
   notificationJobId: string;
 };
+
+type AppointmentWithRelations = Prisma.AppointmentGetPayload<{
+  include: { client: true; service: true; tenant: true; professional: true };
+}>;
 
 @Injectable()
 export class NotificationsService implements OnModuleDestroy {
@@ -21,6 +31,7 @@ export class NotificationsService implements OnModuleDestroy {
   constructor(
     private readonly prisma: PrismaService,
     private readonly env: EnvService,
+    private readonly whatsapp: WhatsAppProvider,
   ) {
     this.connection = { url: this.env.redisUrl };
     this.bootstrapQueue();
@@ -47,72 +58,228 @@ export class NotificationsService implements OnModuleDestroy {
     await this.queue?.close();
   }
 
+  private manageUrl(manageToken: string): string {
+    return `${this.env.appPublicUrl}/agendamento/${manageToken}`;
+  }
+
+  private formatWhen(appointment: AppointmentWithRelations): string {
+    return appointment.startsAt.toLocaleString('pt-BR', {
+      timeZone: appointment.tenant.timezone,
+      dateStyle: 'short',
+      timeStyle: 'short',
+    });
+  }
+
+  /**
+   * Confirmação imediata (e-mail) + lembretes com delay real na fila:
+   * 24h e 2h antes do horário, por e-mail e WhatsApp.
+   */
   async enqueueBookingConfirmation(appointmentId: string) {
     const appointment = await this.prisma.appointment.findUnique({
       where: { id: appointmentId },
-      include: {
-        client: true,
-        service: true,
-        tenant: true,
-        professional: true,
-      },
+      include: { client: true, service: true, tenant: true, professional: true },
     });
     if (!appointment) return;
 
-    const emailJob = await this.prisma.notificationJob.create({
-      data: {
+    const when = this.formatWhen(appointment);
+    const manageUrl = this.manageUrl(appointment.manageToken);
+
+    await this.createAndEnqueue({
+      tenantId: appointment.tenantId,
+      appointmentId: appointment.id,
+      type: NotificationJobType.BOOKING_CONFIRMATION,
+      channel: NotificationChannel.EMAIL,
+      payload: {
+        to: appointment.client.email,
+        subject: `Agendamento confirmado — ${appointment.tenant.name}`,
+        text: [
+          `Olá ${appointment.client.name}!`,
+          '',
+          `Seu horário está garantido: ${appointment.service.name} em ${when}.`,
+          `Local: ${appointment.tenant.name}${appointment.tenant.address ? ` — ${appointment.tenant.address}` : ''}`,
+          '',
+          `Para confirmar presença, remarcar ou cancelar, use seu link exclusivo:`,
+          manageUrl,
+        ].join('\n'),
+        appointmentId: appointment.id,
+      },
+    });
+
+    // Lembretes: 24h e 2h antes (somente se ainda houver tempo hábil)
+    for (const hoursBefore of [24, 2]) {
+      const scheduledFor = new Date(appointment.startsAt.getTime() - hoursBefore * 3_600_000);
+      const delayMs = scheduledFor.getTime() - Date.now();
+      if (delayMs <= 0) continue;
+
+      const reminderText =
+        `Olá ${appointment.client.name}! Lembrete do seu horário em ${appointment.tenant.name}: ` +
+        `${appointment.service.name} em ${when}. ` +
+        `Confirme ou remarque aqui: ${manageUrl}`;
+
+      await this.createAndEnqueue(
+        {
+          tenantId: appointment.tenantId,
+          appointmentId: appointment.id,
+          type: NotificationJobType.BOOKING_REMINDER,
+          channel: NotificationChannel.WHATSAPP,
+          scheduledFor,
+          payload: {
+            phone: appointment.client.phone,
+            message: reminderText,
+            waLink: this.buildWaLink(appointment.client.phone, reminderText),
+            appointmentId: appointment.id,
+          },
+        },
+        delayMs,
+      );
+
+      if (appointment.client.email) {
+        await this.createAndEnqueue(
+          {
+            tenantId: appointment.tenantId,
+            appointmentId: appointment.id,
+            type: NotificationJobType.BOOKING_REMINDER,
+            channel: NotificationChannel.EMAIL,
+            scheduledFor,
+            payload: {
+              to: appointment.client.email,
+              subject: `Lembrete: ${appointment.service.name} em ${when} — ${appointment.tenant.name}`,
+              text: reminderText,
+              appointmentId: appointment.id,
+            },
+          },
+          delayMs,
+        );
+      }
+    }
+
+    return { manageUrl };
+  }
+
+  async enqueueBookingCancelled(appointmentId: string, cancelledBy: 'client' | 'professional') {
+    const appointment = await this.prisma.appointment.findUnique({
+      where: { id: appointmentId },
+      include: { client: true, service: true, tenant: true, professional: true },
+    });
+    if (!appointment) return;
+
+    const when = this.formatWhen(appointment);
+    const bookingUrl = `${this.env.appPublicUrl}/u/${appointment.tenant.slug}`;
+
+    if (appointment.client.email) {
+      await this.createAndEnqueue({
         tenantId: appointment.tenantId,
         appointmentId: appointment.id,
-        type: NotificationJobType.BOOKING_CONFIRMATION,
+        type: NotificationJobType.BOOKING_CANCELLED,
         channel: NotificationChannel.EMAIL,
         payload: {
           to: appointment.client.email,
-          subject: `Agendamento confirmado — ${appointment.tenant.name}`,
+          subject: `Agendamento cancelado — ${appointment.tenant.name}`,
+          text:
+            cancelledBy === 'professional'
+              ? `Olá ${appointment.client.name}, seu horário de ${appointment.service.name} em ${when} foi cancelado por ${appointment.tenant.name}. Reagende quando quiser: ${bookingUrl}`
+              : `Olá ${appointment.client.name}, confirmamos o cancelamento do seu horário de ${appointment.service.name} em ${when}. Reagende quando quiser: ${bookingUrl}`,
           appointmentId: appointment.id,
         },
-        status: NotificationJobStatus.PENDING,
-      },
-    });
-
-    // Link wa.me pré-preenchido (diferencial MVP sem WhatsApp Business API)
-    const phoneDigits = appointment.client.phone.replace(/\D/g, '');
-    const when = appointment.startsAt.toLocaleString('pt-BR', {
-      timeZone: appointment.tenant.timezone,
-    });
-    const text = encodeURIComponent(
-      `Olá ${appointment.client.name}! Lembrete do seu horário em ${appointment.tenant.name}: ${appointment.service.name} em ${when}.`,
-    );
-    const waLink = `https://wa.me/${phoneDigits}?text=${text}`;
-
-    const waJob = await this.prisma.notificationJob.create({
-      data: {
-        tenantId: appointment.tenantId,
-        appointmentId: appointment.id,
-        type: NotificationJobType.WHATSAPP_REMINDER_LINK,
-        channel: NotificationChannel.WHATSAPP,
-        payload: {
-          waLink,
-          phone: appointment.client.phone,
-          appointmentId: appointment.id,
-        },
-        status: NotificationJobStatus.PENDING,
-        scheduledFor: new Date(appointment.startsAt.getTime() - 24 * 3600_000),
-      },
-    });
-
-    await this.enqueue(emailJob.id);
-    await this.enqueue(waJob.id);
-
-    return { emailJobId: emailJob.id, waJobId: waJob.id, waLink };
+      });
+    }
   }
 
-  private async enqueue(notificationJobId: string) {
-    if (!this.queue) return;
+  async enqueuePasswordReset(tenantId: string, email: string, name: string, resetUrl: string) {
+    await this.createAndEnqueue({
+      tenantId,
+      type: NotificationJobType.PASSWORD_RESET,
+      channel: NotificationChannel.EMAIL,
+      payload: {
+        to: email,
+        subject: 'Redefinição de senha — Agenda Pro',
+        text: [
+          `Olá ${name},`,
+          '',
+          'Recebemos um pedido para redefinir a sua senha. O link vale por 1 hora:',
+          resetUrl,
+          '',
+          'Se você não pediu isso, ignore este e-mail — sua senha continua a mesma.',
+        ].join('\n'),
+      },
+    });
+  }
+
+  async enqueueWaitlistSlotOpen(input: {
+    tenantId: string;
+    tenantName: string;
+    tenantSlug: string;
+    dateKey: string;
+    clientName: string;
+    clientPhone: string;
+    clientEmail: string | null;
+  }) {
+    const bookingUrl = `${this.env.appPublicUrl}/u/${input.tenantSlug}`;
+    const message =
+      `Olá ${input.clientName}! Abriu um horário em ${input.tenantName} no dia que você queria (${input.dateKey}). ` +
+      `Corre para garantir: ${bookingUrl}`;
+
+    await this.createAndEnqueue({
+      tenantId: input.tenantId,
+      type: NotificationJobType.WAITLIST_SLOT_OPEN,
+      channel: NotificationChannel.WHATSAPP,
+      payload: {
+        phone: input.clientPhone,
+        message,
+        waLink: this.buildWaLink(input.clientPhone, message),
+      },
+    });
+
+    if (input.clientEmail) {
+      await this.createAndEnqueue({
+        tenantId: input.tenantId,
+        type: NotificationJobType.WAITLIST_SLOT_OPEN,
+        channel: NotificationChannel.EMAIL,
+        payload: {
+          to: input.clientEmail,
+          subject: `Vaga aberta em ${input.tenantName}!`,
+          text: message,
+        },
+      });
+    }
+  }
+
+  private buildWaLink(phone: string, text: string): string {
+    const digits = phone.replace(/\D/g, '');
+    const number = digits.startsWith('55') ? digits : `55${digits}`;
+    return `https://wa.me/${number}?text=${encodeURIComponent(text)}`;
+  }
+
+  private async createAndEnqueue(
+    data: {
+      tenantId: string;
+      appointmentId?: string;
+      type: NotificationJobType;
+      channel: NotificationChannel;
+      payload: Record<string, unknown>;
+      scheduledFor?: Date;
+    },
+    delayMs = 0,
+  ) {
+    const record = await this.prisma.notificationJob.create({
+      data: {
+        tenantId: data.tenantId,
+        appointmentId: data.appointmentId,
+        type: data.type,
+        channel: data.channel,
+        payload: data.payload as Prisma.InputJsonValue,
+        status: NotificationJobStatus.PENDING,
+        scheduledFor: data.scheduledFor ?? new Date(),
+      },
+    });
+
+    if (!this.queue) return record;
     try {
       await this.queue.add(
         'notify',
-        { notificationJobId },
+        { notificationJobId: record.id },
         {
+          delay: Math.max(0, delayMs),
           removeOnComplete: 100,
           removeOnFail: 50,
           attempts: 3,
@@ -120,8 +287,9 @@ export class NotificationsService implements OnModuleDestroy {
         },
       );
     } catch (error) {
-      this.logger.warn(`Falha ao enfileirar ${notificationJobId}: ${(error as Error).message}`);
+      this.logger.warn(`Falha ao enfileirar ${record.id}: ${(error as Error).message}`);
     }
+    return record;
   }
 
   private async processJob(job: Job<NotificationJobPayload>) {
@@ -130,19 +298,40 @@ export class NotificationsService implements OnModuleDestroy {
     });
     if (!record || record.status === NotificationJobStatus.COMPLETED) return;
 
+    // Lembrete de agendamento que já foi cancelado não deve ser enviado
+    if (record.appointmentId && record.type === NotificationJobType.BOOKING_REMINDER) {
+      const appt = await this.prisma.appointment.findUnique({
+        where: { id: record.appointmentId },
+        select: { status: true },
+      });
+      if (appt && (appt.status === 'CANCELLED' || appt.status === 'NO_SHOW')) {
+        await this.prisma.notificationJob.update({
+          where: { id: record.id },
+          data: { status: NotificationJobStatus.COMPLETED, processedAt: new Date() },
+        });
+        return;
+      }
+    }
+
     await this.prisma.notificationJob.update({
       where: { id: record.id },
       data: { status: NotificationJobStatus.PROCESSING, attempts: { increment: 1 } },
     });
 
     try {
+      const payload = record.payload as Record<string, unknown>;
+
       if (record.channel === NotificationChannel.EMAIL) {
-        await this.sendEmail(record.payload as Record<string, unknown>);
+        await this.sendEmail(payload);
       } else if (record.channel === NotificationChannel.WHATSAPP) {
-        // MVP: não dispara API externa — marca como pronto; o link fica no payload para o dashboard
-        this.logger.log(
-          `WhatsApp reminder pronto: ${(record.payload as { waLink?: string }).waLink}`,
+        const sent = await this.whatsapp.sendText(
+          String(payload.phone ?? ''),
+          String(payload.message ?? ''),
         );
+        if (!sent) {
+          // Modo link: o wa.me fica no payload para disparo manual pelo dashboard
+          this.logger.log(`WhatsApp em modo link: ${payload.waLink}`);
+        }
       }
 
       await this.prisma.notificationJob.update({
@@ -184,7 +373,7 @@ export class NotificationsService implements OnModuleDestroy {
       from: this.env.emailFrom,
       to,
       subject: String(payload.subject ?? 'Agendamento'),
-      text: `Seu agendamento foi registrado. ID: ${payload.appointmentId}`,
+      text: String(payload.text ?? ''),
     });
   }
 }

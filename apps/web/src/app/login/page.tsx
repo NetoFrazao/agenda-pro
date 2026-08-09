@@ -6,7 +6,7 @@ import { FormEvent, useState } from 'react';
 import { BrandLogo } from '@/components/BrandLogo';
 import { Alert, Button, Field, Input } from '@/components/ui';
 import { api, ApiError } from '@/lib/api';
-import { setTokens } from '@/lib/auth';
+import { setSessionFlag } from '@/lib/auth';
 import type { LoginResponse } from '@/lib/types';
 
 export default function LoginPage() {
@@ -21,12 +21,13 @@ export default function LoginPage() {
     setError(null);
     setLoading(true);
     try {
-      const data = await api<LoginResponse>('/api/auth/login', {
+      await api<LoginResponse>('/api/auth/login', {
         method: 'POST',
         auth: false,
         body: { email, password },
       });
-      setTokens(data.accessToken, data.refreshToken);
+      // Sessão fica nos cookies httpOnly; só marcamos o flag de UX.
+      setSessionFlag();
       router.replace('/dashboard');
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Não foi possível entrar.');
@@ -68,6 +69,14 @@ export default function LoginPage() {
               onChange={(e) => setPassword(e.target.value)}
             />
           </Field>
+          <div className="text-right">
+            <Link
+              href="/esqueci-senha"
+              className="text-sm font-medium text-emerald-800 hover:underline"
+            >
+              Esqueci minha senha
+            </Link>
+          </div>
           <Button type="submit" fullWidth disabled={loading}>
             {loading ? 'Entrando…' : 'Entrar'}
           </Button>

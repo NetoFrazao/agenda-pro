@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { CreateAvailabilityRuleDto } from './dto/availability.dto';
+import { CreateAvailabilityExceptionDto, CreateAvailabilityRuleDto } from './dto/availability.dto';
 
 @Injectable()
 export class AvailabilityService {
@@ -36,6 +36,60 @@ export class AvailabilityService {
       throw new NotFoundException('Regra não encontrada');
     }
     await this.prisma.availabilityRule.delete({ where: { id } });
+    return { ok: true };
+  }
+
+  // ---- Exceções pontuais: folgas, feriados e janelas especiais ----
+
+  listExceptions(tenantId: string, from?: string, to?: string) {
+    return this.prisma.availabilityException.findMany({
+      where: {
+        tenantId,
+        ...(from || to
+          ? {
+              date: {
+                ...(from ? { gte: new Date(from) } : {}),
+                ...(to ? { lte: new Date(to) } : {}),
+              },
+            }
+          : { date: { gte: new Date(new Date().toISOString().slice(0, 10)) } }),
+      },
+      orderBy: { date: 'asc' },
+    });
+  }
+
+  async createException(tenantId: string, dto: CreateAvailabilityExceptionDto) {
+    const isAvailable = dto.isAvailable ?? false;
+    if (isAvailable) {
+      if (dto.startMinute == null || dto.endMinute == null) {
+        throw new BadRequestException('Janela especial exige startMinute e endMinute');
+      }
+      if (dto.endMinute <= dto.startMinute) {
+        throw new BadRequestException('endMinute deve ser maior que startMinute');
+      }
+    }
+
+    return this.prisma.availabilityException.create({
+      data: {
+        tenantId,
+        professionalId: dto.professionalId,
+        date: new Date(dto.date),
+        isAvailable,
+        startMinute: isAvailable ? dto.startMinute : null,
+        endMinute: isAvailable ? dto.endMinute : null,
+        reason: dto.reason,
+      },
+    });
+  }
+
+  async deleteException(tenantId: string, id: string) {
+    const exception = await this.prisma.availabilityException.findFirst({
+      where: { id, tenantId },
+    });
+    if (!exception) {
+      throw new NotFoundException('Exceção não encontrada');
+    }
+    await this.prisma.availabilityException.delete({ where: { id } });
     return { ok: true };
   }
 }

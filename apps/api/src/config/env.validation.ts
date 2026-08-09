@@ -32,6 +32,14 @@ const envSchema = z.object({
   SMTP_USER: z.string().optional().default(''),
   SMTP_PASS: z.string().optional().default(''),
   EMAIL_FROM: z.string().default('Agenda Pro <noreply@agendapro.local>'),
+  /// Swagger fica sempre ligado fora de produção; em produção só com 'true'
+  SWAGGER_ENABLED: z.enum(['true', 'false']).default('false'),
+  /// WhatsApp via Evolution API (self-hosted). Vazio = modo link wa.me
+  EVOLUTION_API_URL: z.string().optional().default(''),
+  EVOLUTION_API_KEY: z.string().optional().default(''),
+  EVOLUTION_INSTANCE: z.string().optional().default(''),
+  /// PIX via Mercado Pago. Vazio = sinal vira "pagar no local"
+  MERCADOPAGO_ACCESS_TOKEN: z.string().optional().default(''),
 });
 
 export type EnvVars = z.infer<typeof envSchema>;

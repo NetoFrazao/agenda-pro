@@ -8,12 +8,19 @@ import { AppointmentsModule } from './appointments/appointments.module';
 import { AuthModule } from './auth/auth.module';
 import { AvailabilityModule } from './availability/availability.module';
 import { BillingModule } from './billing/billing.module';
+import { ClientsModule } from './clients/clients.module';
 import { EnvModule } from './config/env.module';
 import { validateEnv } from './config/env.validation';
 import { HealthModule } from './health/health.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { PaymentsModule } from './payments/payments.module';
 import { PrismaModule } from './prisma/prisma.module';
+import { ReportsModule } from './reports/reports.module';
+import { ReviewsModule } from './reviews/reviews.module';
 import { ServicesModule } from './services/services.module';
+import { SettingsModule } from './settings/settings.module';
+import { TeamModule } from './team/team.module';
+import { WaitlistModule } from './waitlist/waitlist.module';
 
 @Module({
   imports: [
@@ -57,6 +64,13 @@ import { ServicesModule } from './services/services.module';
     NotificationsModule,
     BillingModule,
     AccountModule,
+    PaymentsModule,
+    WaitlistModule,
+    SettingsModule,
+    TeamModule,
+    ReportsModule,
+    ClientsModule,
+    ReviewsModule,
   ],
   providers: [
     {

@@ -52,7 +52,26 @@ export class LoginDto {
 }
 
 export class RefreshDto {
+  @ApiPropertyOptional({ description: 'Opcional se o cookie httpOnly ap_refresh estiver presente' })
+  @IsOptional()
+  @IsString()
+  refreshToken?: string;
+}
+
+export class ForgotPasswordDto {
+  @ApiProperty()
+  @IsEmail()
+  email!: string;
+}
+
+export class ResetPasswordDto {
+  @ApiProperty({ description: 'Token recebido por e-mail' })
+  @IsString()
+  token!: string;
+
   @ApiProperty()
   @IsString()
-  refreshToken!: string;
+  @MinLength(8)
+  @MaxLength(72)
+  password!: string;
 }

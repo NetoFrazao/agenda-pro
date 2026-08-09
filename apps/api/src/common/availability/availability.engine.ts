@@ -67,13 +67,17 @@ function overlaps(aStart: Date, aEnd: Date, bStart: Date, bEnd: Date): boolean {
 
 /**
  * Gera slots de início (UTC) para um dia civil.
- * stepMinutes normalmente = duração do serviço (ou grade fixa, ex: 15).
+ * - stepMinutes: grade fixa exibida ao cliente (padrão de mercado: 15min)
+ * - bufferMinutes: intervalo obrigatório antes/depois de cada atendimento
+ * - minNoticeMinutes: antecedência mínima para aceitar o agendamento
  */
 export function computeDaySlots(input: {
   dateKey: string;
   timeZone: string;
   durationMinutes: number;
   stepMinutes?: number;
+  bufferMinutes?: number;
+  minNoticeMinutes?: number;
   rules: AvailabilityRuleLike[];
   exceptions: AvailabilityExceptionLike[];
   busy: BusyInterval[];
@@ -83,7 +87,9 @@ export function computeDaySlots(input: {
     dateKey,
     timeZone,
     durationMinutes,
-    stepMinutes = durationMinutes,
+    stepMinutes = 15,
+    bufferMinutes = 0,
+    minNoticeMinutes = 0,
     rules,
     exceptions,
     busy,
@@ -121,15 +127,27 @@ export function computeDaySlots(input: {
   }
 
   const slots: Date[] = [];
+  const minStartMs = now.getTime() + minNoticeMinutes * 60_000;
+  // Buffer é aplicado expandindo os intervalos ocupados nas duas pontas:
+  // um horário só é oferecido se respeitar a folga antes e depois do vizinho.
+  const bufferMs = bufferMinutes * 60_000;
 
   for (const win of windows) {
+    // Grade ancorada no início da janela (ex: 09:00, 09:15, 09:30...)
     for (let startMin = win.start; startMin + durationMinutes <= win.end; startMin += stepMinutes) {
       const startsAt = zonedCivilToUtc(dateKey, startMin, timeZone);
       const endsAt = new Date(startsAt.getTime() + durationMinutes * 60_000);
 
-      if (startsAt <= now) continue;
+      if (startsAt.getTime() < minStartMs) continue;
 
-      const conflict = busy.some((b) => overlaps(startsAt, endsAt, b.startsAt, b.endsAt));
+      const conflict = busy.some((b) =>
+        overlaps(
+          startsAt,
+          endsAt,
+          new Date(b.startsAt.getTime() - bufferMs),
+          new Date(b.endsAt.getTime() + bufferMs),
+        ),
+      );
       if (conflict) continue;
 
       slots.push(startsAt);
@@ -139,7 +157,20 @@ export function computeDaySlots(input: {
   return slots;
 }
 
-/** Detecta conflito de overlap com intervalos ocupados. */
-export function hasOverlap(startsAt: Date, endsAt: Date, busy: BusyInterval[]): boolean {
-  return busy.some((b) => overlaps(startsAt, endsAt, b.startsAt, b.endsAt));
+/** Detecta conflito de overlap com intervalos ocupados (buffer opcional). */
+export function hasOverlap(
+  startsAt: Date,
+  endsAt: Date,
+  busy: BusyInterval[],
+  bufferMinutes = 0,
+): boolean {
+  const bufferMs = bufferMinutes * 60_000;
+  return busy.some((b) =>
+    overlaps(
+      startsAt,
+      endsAt,
+      new Date(b.startsAt.getTime() - bufferMs),
+      new Date(b.endsAt.getTime() + bufferMs),
+    ),
+  );
 }

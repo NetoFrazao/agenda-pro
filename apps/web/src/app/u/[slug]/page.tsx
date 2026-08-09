@@ -3,30 +3,42 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { BrandLogo } from '@/components/BrandLogo';
-import { Alert, Button, EmptyState, Field, Input, Spinner, Textarea } from '@/components/ui';
+import { CopyButton, PixBlock } from '@/components/pix';
+import { Alert, Button, EmptyState, Field, Input, Spinner, Stars, Textarea } from '@/components/ui';
 import { api, ApiError } from '@/lib/api';
-import { formatBRL, formatDate, formatTime } from '@/lib/format';
-import type { BookAppointmentPayload, PublicTenantProfile, Service } from '@/lib/types';
+import { formatBRL, formatDate, formatTime, todayYmd, whatsappLink } from '@/lib/format';
+import type {
+  BookAppointmentPayload,
+  BookAppointmentResponse,
+  PublicProfessional,
+  PublicSlotsResponse,
+  PublicTenantProfile,
+  Service,
+  WaitlistJoinResponse,
+} from '@/lib/types';
 
-type Step = 1 | 2 | 3 | 4 | 5;
+type StepId = 'service' | 'professional' | 'date' | 'time' | 'details' | 'done';
 
-const STEP_LABELS = ['Serviço', 'Dia', 'Horário', 'Seus dados', 'Confirmação'] as const;
+const STEP_LABELS: Record<StepId, string> = {
+  service: 'Serviço',
+  professional: 'Profissional',
+  date: 'Dia',
+  time: 'Horário',
+  details: 'Seus dados',
+  done: 'Confirmação',
+};
 
-function todayYmd(): string {
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
-}
+/** 'any' = sem preferência (a API usa o dono da agenda). */
+type ProfessionalChoice = PublicProfessional | 'any' | null;
 
 export default function PublicBookingPage() {
   const params = useParams<{ slug: string }>();
   const slug = params.slug;
 
   const [profile, setProfile] = useState<PublicTenantProfile | null>(null);
-  const [step, setStep] = useState<Step>(1);
+  const [step, setStep] = useState<StepId>('service');
   const [service, setService] = useState<Service | null>(null);
+  const [professional, setProfessional] = useState<ProfessionalChoice>(null);
   const [date, setDate] = useState(todayYmd());
   const [slots, setSlots] = useState<string[]>([]);
   const [slot, setSlot] = useState<string | null>(null);
@@ -38,7 +50,14 @@ export default function PublicBookingPage() {
   const [slotsLoading, setSlotsLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [booked, setBooked] = useState(false);
+  const [bookResult, setBookResult] = useState<BookAppointmentResponse | null>(null);
+
+  // Lista de espera do dia sem horários
+  const [wlName, setWlName] = useState('');
+  const [wlPhone, setWlPhone] = useState('');
+  const [wlEmail, setWlEmail] = useState('');
+  const [wlBusy, setWlBusy] = useState(false);
+  const [wlResult, setWlResult] = useState<'added' | 'already' | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -64,15 +83,31 @@ export default function PublicBookingPage() {
     };
   }, [slug]);
 
+  const professionals = useMemo(() => profile?.professionals ?? [], [profile]);
+  const hasProfessionalStep = professionals.length > 1;
+
+  const stepOrder = useMemo<StepId[]>(
+    () =>
+      hasProfessionalStep
+        ? ['service', 'professional', 'date', 'time', 'details', 'done']
+        : ['service', 'date', 'time', 'details', 'done'],
+    [hasProfessionalStep],
+  );
+
+  const selectedProfessionalId =
+    professional && professional !== 'any' ? professional.id : undefined;
+
   useEffect(() => {
-    if (step !== 3 || !service || !date) return;
+    if (step !== 'time' || !service || !date) return;
     let cancelled = false;
     setSlotsLoading(true);
     setError(null);
-    void api<string[] | { slots: string[] }>(
-      `/api/public/${slug}/slots?serviceId=${encodeURIComponent(service.id)}&date=${encodeURIComponent(date)}`,
-      { auth: false },
-    )
+    setWlResult(null);
+    const qs = new URLSearchParams({ serviceId: service.id, date });
+    if (selectedProfessionalId) qs.set('professionalId', selectedProfessionalId);
+    void api<string[] | PublicSlotsResponse>(`/api/public/${slug}/slots?${qs.toString()}`, {
+      auth: false,
+    })
       .then((data) => {
         if (cancelled) return;
         const list = Array.isArray(data) ? data : data.slots || [];
@@ -90,21 +125,25 @@ export default function PublicBookingPage() {
     return () => {
       cancelled = true;
     };
-  }, [step, service, date, slug]);
+  }, [step, service, date, slug, selectedProfessionalId]);
 
   const timezone = profile?.timezone;
 
   const stepStatus = useMemo(() => {
-    return STEP_LABELS.map((label, i) => {
-      const n = (i + 1) as Step;
-      return {
-        label,
-        n,
-        current: step === n,
-        complete: step > n,
-      };
-    });
-  }, [step]);
+    const currentIndex = stepOrder.indexOf(step);
+    return stepOrder.map((id, i) => ({
+      id,
+      label: STEP_LABELS[id],
+      n: i + 1,
+      current: i === currentIndex,
+      complete: i < currentIndex,
+    }));
+  }, [step, stepOrder]);
+
+  function goToStepAfterService() {
+    setSlot(null);
+    setStep(hasProfessionalStep ? 'professional' : 'date');
+  }
 
   async function submitBooking(e: FormEvent) {
     e.preventDefault();
@@ -114,23 +153,57 @@ export default function PublicBookingPage() {
     try {
       const payload: BookAppointmentPayload = {
         serviceId: service.id,
+        professionalId: selectedProfessionalId,
         startsAt: slot,
         clientName: clientName.trim(),
         clientPhone: clientPhone.trim(),
         clientEmail: clientEmail.trim() || undefined,
         notes: notes.trim() || undefined,
       };
-      await api(`/api/public/${slug}/book`, {
+      const result = await api<BookAppointmentResponse>(`/api/public/${slug}/book`, {
         method: 'POST',
         auth: false,
         body: payload,
       });
-      setBooked(true);
-      setStep(5);
+      setBookResult(result);
+      setStep('done');
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Não foi possível concluir o agendamento.');
+      if (err instanceof ApiError && err.status === 409) {
+        // Corrida por horário: volta para os slots e recarrega
+        setError('Esse horário acabou de ser reservado, escolha outro.');
+        setSlot(null);
+        setStep('time');
+      } else {
+        setError(
+          err instanceof ApiError ? err.message : 'Não foi possível concluir o agendamento.',
+        );
+      }
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  async function joinWaitlist(e: FormEvent) {
+    e.preventDefault();
+    setWlBusy(true);
+    setError(null);
+    try {
+      const res = await api<WaitlistJoinResponse>(`/api/public/${slug}/waitlist`, {
+        method: 'POST',
+        auth: false,
+        body: {
+          dateKey: date,
+          serviceId: service?.id,
+          clientName: wlName.trim(),
+          clientPhone: wlPhone.trim(),
+          clientEmail: wlEmail.trim() || undefined,
+        },
+      });
+      setWlResult(res.alreadyOnList ? 'already' : 'added');
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Não foi possível entrar na lista.');
+    } finally {
+      setWlBusy(false);
     }
   }
 
@@ -155,15 +228,45 @@ export default function PublicBookingPage() {
     );
   }
 
+  const professionalLabel =
+    professional === 'any' ? 'Sem preferência' : professional ? professional.name : null;
+
   return (
     <div className="flex min-h-screen flex-col bg-atmosphere">
       <header className="border-b border-stone-200/70 bg-white/50 px-6 py-5 backdrop-blur">
-        <div className="mx-auto flex max-w-2xl items-center justify-between gap-4">
-          <div>
-            <p className="font-display text-2xl font-semibold text-stone-900">{profile.name}</p>
-            <p className="text-sm text-stone-500">Agendamento online</p>
+        <div className="mx-auto max-w-2xl">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="font-display text-2xl font-semibold text-stone-900">{profile.name}</p>
+              <p className="text-sm text-stone-500">Agendamento online</p>
+            </div>
+            <BrandLogo href="/" size="sm" className="!text-base opacity-70" />
           </div>
-          <BrandLogo href="/" size="sm" className="!text-base opacity-70" />
+          {profile.rating.count > 0 && profile.rating.average != null ? (
+            <p className="mt-3 flex items-center gap-2 text-sm text-stone-700">
+              <Stars value={profile.rating.average} />
+              <span>
+                <strong>{profile.rating.average.toLocaleString('pt-BR')}</strong> (
+                {profile.rating.count} {profile.rating.count === 1 ? 'avaliação' : 'avaliações'})
+              </span>
+            </p>
+          ) : null}
+          {profile.about ? (
+            <p className="mt-3 max-w-xl text-sm text-stone-600">{profile.about}</p>
+          ) : null}
+          <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-sm text-stone-600">
+            {profile.address ? <span>{profile.address}</span> : null}
+            {profile.whatsapp ? (
+              <a
+                href={whatsappLink(profile.whatsapp)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-semibold text-emerald-800 hover:underline"
+              >
+                WhatsApp
+              </a>
+            ) : null}
+          </div>
         </div>
       </header>
 
@@ -171,7 +274,7 @@ export default function PublicBookingPage() {
         <nav aria-label="Etapas do agendamento" className="mb-8">
           <ol className="flex flex-wrap gap-2">
             {stepStatus.map((s) => (
-              <li key={s.n}>
+              <li key={s.id}>
                 <span
                   className={`inline-flex items-center gap-2 rounded-md px-2.5 py-1 text-xs font-semibold ${
                     s.current
@@ -189,13 +292,13 @@ export default function PublicBookingPage() {
           </ol>
         </nav>
 
-        {error && step !== 5 ? (
+        {error && step !== 'done' ? (
           <div className="mb-4">
             <Alert>{error}</Alert>
           </div>
         ) : null}
 
-        {step === 1 ? (
+        {step === 'service' ? (
           <section aria-labelledby="step-service">
             <h1 id="step-service" className="font-display text-2xl font-semibold text-stone-900">
               Escolha o serviço
@@ -211,13 +314,13 @@ export default function PublicBookingPage() {
                       className="w-full rounded-lg bg-white p-4 text-left ring-1 ring-stone-200 transition hover:ring-emerald-600 focus-visible:ring-2 focus-visible:ring-emerald-700"
                       onClick={() => {
                         setService(s);
-                        setSlot(null);
-                        setStep(2);
+                        goToStepAfterService();
                       }}
                     >
                       <p className="font-semibold text-stone-900">{s.name}</p>
                       <p className="mt-1 text-sm text-stone-600">
                         {s.durationMinutes} min · {formatBRL(s.priceCents)}
+                        {s.depositCents ? ` · sinal de ${formatBRL(s.depositCents)}` : ''}
                       </p>
                       {s.description ? (
                         <p className="mt-2 text-sm text-stone-500">{s.description}</p>
@@ -230,13 +333,72 @@ export default function PublicBookingPage() {
           </section>
         ) : null}
 
-        {step === 2 && service ? (
+        {step === 'professional' && service ? (
+          <section aria-labelledby="step-professional">
+            <h1
+              id="step-professional"
+              className="font-display text-2xl font-semibold text-stone-900"
+            >
+              Escolha o profissional
+            </h1>
+            <p className="mt-2 text-sm text-stone-600">
+              Serviço: <strong>{service.name}</strong>
+            </p>
+            <ul className="mt-6 space-y-3">
+              <li>
+                <button
+                  type="button"
+                  className="w-full rounded-lg bg-white p-4 text-left ring-1 ring-stone-200 transition hover:ring-emerald-600 focus-visible:ring-2 focus-visible:ring-emerald-700"
+                  onClick={() => {
+                    setProfessional('any');
+                    setSlot(null);
+                    setStep('date');
+                  }}
+                >
+                  <p className="font-semibold text-stone-900">Sem preferência</p>
+                  <p className="mt-1 text-sm text-stone-600">Qualquer profissional disponível</p>
+                </button>
+              </li>
+              {professionals.map((p) => (
+                <li key={p.id}>
+                  <button
+                    type="button"
+                    className="w-full rounded-lg bg-white p-4 text-left ring-1 ring-stone-200 transition hover:ring-emerald-600 focus-visible:ring-2 focus-visible:ring-emerald-700"
+                    onClick={() => {
+                      setProfessional(p);
+                      setSlot(null);
+                      setStep('date');
+                    }}
+                  >
+                    <p className="font-semibold text-stone-900">{p.name}</p>
+                    {p.role === 'OWNER' ? (
+                      <p className="mt-1 text-sm text-stone-600">Responsável</p>
+                    ) : null}
+                  </button>
+                </li>
+              ))}
+            </ul>
+            <div className="mt-6">
+              <Button type="button" variant="secondary" onClick={() => setStep('service')}>
+                Voltar
+              </Button>
+            </div>
+          </section>
+        ) : null}
+
+        {step === 'date' && service ? (
           <section aria-labelledby="step-day">
             <h1 id="step-day" className="font-display text-2xl font-semibold text-stone-900">
               Escolha o dia
             </h1>
             <p className="mt-2 text-sm text-stone-600">
               Serviço: <strong>{service.name}</strong>
+              {professionalLabel ? (
+                <>
+                  {' '}
+                  · Profissional: <strong>{professionalLabel}</strong>
+                </>
+              ) : null}
             </p>
             <div className="mt-6 max-w-xs">
               <Field label="Data" id="booking-date">
@@ -248,19 +410,24 @@ export default function PublicBookingPage() {
                   onChange={(e) => {
                     setDate(e.target.value);
                     setSlot(null);
+                    setWlResult(null);
                   }}
                 />
               </Field>
             </div>
             <div className="mt-6 flex flex-wrap gap-2">
-              <Button type="button" variant="secondary" onClick={() => setStep(1)}>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => setStep(hasProfessionalStep ? 'professional' : 'service')}
+              >
                 Voltar
               </Button>
               <Button
                 type="button"
                 onClick={() => {
                   setSlot(null);
-                  setStep(3);
+                  setStep('time');
                 }}
                 disabled={!date}
               >
@@ -270,7 +437,7 @@ export default function PublicBookingPage() {
           </section>
         ) : null}
 
-        {step === 3 && service ? (
+        {step === 'time' && service ? (
           <section aria-labelledby="step-slot">
             <h1 id="step-slot" className="font-display text-2xl font-semibold text-stone-900">
               Escolha o horário
@@ -281,8 +448,66 @@ export default function PublicBookingPage() {
                 <Spinner label="Buscando horários…" />
               </div>
             ) : slots.length === 0 ? (
-              <div className="mt-6">
-                <EmptyState>Nenhum horário livre neste dia. Tente outra data.</EmptyState>
+              <div className="mt-6 space-y-5">
+                <EmptyState>Nenhum horário livre neste dia.</EmptyState>
+                <section
+                  aria-labelledby="waitlist-title"
+                  className="rounded-lg bg-white p-5 ring-1 ring-stone-200"
+                >
+                  <h2
+                    id="waitlist-title"
+                    className="font-display text-lg font-semibold text-stone-900"
+                  >
+                    Avise-me se abrir vaga
+                  </h2>
+                  {wlResult ? (
+                    <div className="mt-3">
+                      <Alert tone="success">
+                        {wlResult === 'already'
+                          ? 'Você já está na lista de espera deste dia. Vamos te avisar se abrir vaga.'
+                          : 'Pronto! Você entrou na lista de espera e será avisado se abrir vaga.'}
+                      </Alert>
+                    </div>
+                  ) : (
+                    <form onSubmit={joinWaitlist} className="mt-4 space-y-4" noValidate>
+                      <p className="text-sm text-stone-600">
+                        Deixe seu contato e avisaremos caso algum horário abra em{' '}
+                        <strong>{formatDate(date, timezone)}</strong>.
+                      </p>
+                      <Field label="Nome" id="wl-name">
+                        <Input
+                          id="wl-name"
+                          required
+                          autoComplete="name"
+                          value={wlName}
+                          onChange={(e) => setWlName(e.target.value)}
+                        />
+                      </Field>
+                      <Field label="WhatsApp" id="wl-phone" hint="Com DDD, ex: 11999998888">
+                        <Input
+                          id="wl-phone"
+                          required
+                          type="tel"
+                          autoComplete="tel"
+                          value={wlPhone}
+                          onChange={(e) => setWlPhone(e.target.value)}
+                        />
+                      </Field>
+                      <Field label="E-mail (opcional)" id="wl-email">
+                        <Input
+                          id="wl-email"
+                          type="email"
+                          autoComplete="email"
+                          value={wlEmail}
+                          onChange={(e) => setWlEmail(e.target.value)}
+                        />
+                      </Field>
+                      <Button type="submit" disabled={wlBusy || !wlName.trim() || !wlPhone.trim()}>
+                        {wlBusy ? 'Enviando…' : 'Entrar na lista de espera'}
+                      </Button>
+                    </form>
+                  )}
+                </section>
               </div>
             ) : (
               <ul
@@ -313,23 +538,25 @@ export default function PublicBookingPage() {
               </ul>
             )}
             <div className="mt-6 flex flex-wrap gap-2">
-              <Button type="button" variant="secondary" onClick={() => setStep(2)}>
+              <Button type="button" variant="secondary" onClick={() => setStep('date')}>
                 Voltar
               </Button>
-              <Button type="button" disabled={!slot} onClick={() => setStep(4)}>
+              <Button type="button" disabled={!slot} onClick={() => setStep('details')}>
                 Continuar
               </Button>
             </div>
           </section>
         ) : null}
 
-        {step === 4 && service && slot ? (
+        {step === 'details' && service && slot ? (
           <section aria-labelledby="step-form">
             <h1 id="step-form" className="font-display text-2xl font-semibold text-stone-900">
               Seus dados
             </h1>
             <p className="mt-2 text-sm text-stone-600">
-              {service.name} · {formatDate(date, timezone)} · {formatTime(slot, timezone)}
+              {service.name}
+              {professionalLabel ? ` · ${professionalLabel}` : ''} · {formatDate(date, timezone)} ·{' '}
+              {formatTime(slot, timezone)}
             </p>
             <form onSubmit={submitBooking} className="mt-6 space-y-4" noValidate>
               <Field label="Nome completo" id="clientName">
@@ -369,7 +596,7 @@ export default function PublicBookingPage() {
                 />
               </Field>
               <div className="flex flex-wrap gap-2 pt-2">
-                <Button type="button" variant="secondary" onClick={() => setStep(3)}>
+                <Button type="button" variant="secondary" onClick={() => setStep('time')}>
                   Voltar
                 </Button>
                 <Button type="submit" disabled={submitting}>
@@ -380,22 +607,35 @@ export default function PublicBookingPage() {
           </section>
         ) : null}
 
-        {step === 5 ? (
-          <section aria-labelledby="step-done" aria-live="polite">
+        {step === 'done' && bookResult ? (
+          <section aria-labelledby="step-done" aria-live="polite" className="space-y-5">
             <h1 id="step-done" className="font-display text-2xl font-semibold text-stone-900">
-              {booked ? 'Agendamento confirmado' : 'Resumo'}
+              {bookResult.pix ? 'Quase lá: pague o sinal' : 'Agendamento confirmado'}
             </h1>
-            {booked ? (
-              <Alert tone="success">
-                Pronto! {profile.name} recebeu seu pedido. Guarde o horário e, se precisar remarcar,
-                fale com o estabelecimento.
+
+            {bookResult.pix ? (
+              <Alert tone="info">
+                Recebemos seu pedido.{' '}
+                <strong>O horário só é confirmado após o pagamento do sinal</strong> via PIX abaixo.
               </Alert>
-            ) : null}
-            <dl className="mt-6 space-y-3 rounded-lg bg-white p-5 text-sm ring-1 ring-stone-200">
+            ) : (
+              <Alert tone="success">
+                Pronto! {profile.name} recebeu seu agendamento. Guarde o link abaixo para gerenciar
+                seu horário.
+              </Alert>
+            )}
+
+            <dl className="space-y-3 rounded-lg bg-white p-5 text-sm ring-1 ring-stone-200">
               <div>
                 <dt className="text-stone-500">Serviço</dt>
                 <dd className="font-medium text-stone-900">{service?.name}</dd>
               </div>
+              {professionalLabel ? (
+                <div>
+                  <dt className="text-stone-500">Profissional</dt>
+                  <dd className="font-medium text-stone-900">{professionalLabel}</dd>
+                </div>
+              ) : null}
               <div>
                 <dt className="text-stone-500">Quando</dt>
                 <dd className="font-medium text-stone-900">
@@ -407,6 +647,61 @@ export default function PublicBookingPage() {
                 <dd className="font-medium text-stone-900">{clientName}</dd>
               </div>
             </dl>
+
+            {bookResult.pix ? (
+              <PixBlock
+                amountCents={bookResult.pix.amountCents}
+                copyPaste={bookResult.pix.copyPaste}
+                qrCodeBase64={bookResult.pix.qrCodeBase64}
+                expiresAt={bookResult.pix.expiresAt}
+                timezone={timezone}
+                note="O horário só é confirmado após o pagamento do sinal."
+              />
+            ) : null}
+
+            {bookResult.depositMode === 'local' && bookResult.depositCents > 0 ? (
+              <Alert tone="info">
+                Sinal de {formatBRL(bookResult.depositCents)} a combinar no local.
+              </Alert>
+            ) : null}
+
+            <div className="rounded-lg bg-white p-5 ring-1 ring-stone-200">
+              <h2 className="font-display text-lg font-semibold text-stone-900">
+                Gerencie seu agendamento
+              </h2>
+              <p className="mt-1 text-sm text-stone-600">
+                Use este link para confirmar presença, remarcar ou cancelar.
+              </p>
+              <div className="mt-3 flex flex-wrap items-center gap-3">
+                <a
+                  href={bookResult.manageUrl}
+                  className="break-all text-sm font-semibold text-emerald-800 hover:underline"
+                >
+                  Gerenciar meu agendamento
+                </a>
+                <CopyButton value={bookResult.manageUrl} label="Copiar link" />
+              </div>
+            </div>
+          </section>
+        ) : null}
+
+        {(profile.reviews || []).length > 0 ? (
+          <section aria-labelledby="reviews-title" className="mt-14">
+            <h2 id="reviews-title" className="font-display text-xl font-semibold text-stone-900">
+              Avaliações recentes
+            </h2>
+            <ul className="mt-4 space-y-3">
+              {profile.reviews.map((r, i) => (
+                <li key={i} className="rounded-lg bg-white p-4 ring-1 ring-stone-200">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="font-semibold text-stone-900">{r.clientName || 'Cliente'}</p>
+                    <Stars value={r.rating} />
+                  </div>
+                  {r.comment ? <p className="mt-2 text-sm text-stone-700">{r.comment}</p> : null}
+                  <p className="mt-2 text-xs text-stone-500">{formatDate(r.createdAt, timezone)}</p>
+                </li>
+              ))}
+            </ul>
           </section>
         ) : null}
       </main>
