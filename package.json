@@ -18,6 +18,8 @@
     "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md,yml,yaml}\"",
     "test": "npm run test --workspaces --if-present",
     "test:api": "npm run test -w @agenda-pro/api",
+    "test:e2e:web": "playwright test --config=e2e/playwright.config.ts",
+    "test:e2e:web:live": "node e2e/run-live.cjs",
     "db:generate": "npm run prisma:generate -w @agenda-pro/api",
     "db:migrate": "npm run prisma:migrate -w @agenda-pro/api",
     "db:migrate:dev": "npm run prisma:migrate:dev -w @agenda-pro/api",
@@ -35,6 +37,7 @@
     "node": ">=20"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.1",
     "prettier": "^3.4.2",
     "typescript": "^5.7.3"
   },
