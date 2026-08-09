@@ -1,5 +1,8 @@
 # Deploy — Agenda Pro (Fase 6)
 
+> **Atualizado:** o checklist operacional pós-hardening, Docker prod e health/ready estão em [`DEPLOYMENT.md`](../DEPLOYMENT.md).  
+> Variáveis: [`ENV.md`](./ENV.md) · Índice: [`DOCUMENTATION.md`](./DOCUMENTATION.md).
+
 ## Visão geral
 
 | Parte | Sugestão | Observação |

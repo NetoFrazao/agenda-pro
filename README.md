@@ -1,77 +1,102 @@
 # Agenda Pro
 
-Mini-SaaS de **agendamentos inteligentes** para **barbeiros e manicures** — portfólio júnior/pleno e base de produto cobrável.
+SaaS multi-tenant de **agendamentos** para barbeiros, manicures e pequenos estabelecimentos — pronto para evolução comercial (segurança, PIX, CRM, infra e UX Graphite).
 
-## Status das fases
+## Status
 
-| Fase | Conteúdo | Status |
-|------|----------|--------|
-| 0 | Escopo / MVP | ✅ |
-| 1 | Banco + monorepo + CI | ✅ |
-| 2 | Auth JWT | ✅ |
-| 3 | Disponibilidade + anti double-booking | ✅ |
-| 4 | Filas e-mail/WhatsApp + webhook Stripe | ✅ |
-| 5 | Frontend dashboard + booking público | ✅ |
-| 6 | Deploy docs + case study | ✅ (guia) |
-| 7 | Planos/Stripe demo + LGPD + termos | ✅ |
+| Camada | Status |
+|--------|--------|
+| MVP fases 0–7 (legado) | ✅ |
+| Paridade de mercado (fase 8 produto) | ✅ |
+| Hardening produção (seg/CRM/infra/perf) | ✅ na branch `cursor/saas-hardening-crm-infra` |
+| Suíte E2E frontend (Playwright) | ⏳ backlog |
+| Observabilidade full (Sentry/OTel) | ⏳ planejado |
+
+Relatório consolidado: **[FINAL-AUDIT.md](./FINAL-AUDIT.md)** · Índice: **[docs/DOCUMENTATION.md](./docs/DOCUMENTATION.md)**
 
 ## Stack
 
-Next.js 15 · NestJS · Prisma · PostgreSQL · Redis/BullMQ · JWT · Stripe (opcional) · Docker Compose · GitHub Actions
+Next.js 15 · NestJS · Prisma · PostgreSQL · Redis/BullMQ · JWT (cookies httpOnly) · Stripe · Mercado Pago PIX · Docker · GitHub Actions
 
-## Diferenciais MVP
+## Quick start
 
-- Lembrete **WhatsApp** (`wa.me`) + e-mail assíncrono
-- Preço de serviço **por conta**
-- UI PT-BR
-- Sinal PIX preparado no schema (`depositCents`)
-
-## Subir localmente
-
-```bash
-# Pré-requisitos: Node 20+, Docker Desktop
+```powershell
 cd agenda-pro
-cp .env.example .env
-
-docker compose up -d
+Copy-Item .env.example .env
+npm run docker:up
 npm install
 npm run db:generate
 npm run db:migrate
 npm run prisma:seed -w @agenda-pro/api
-
 npm run dev:api   # http://localhost:3001/docs
 npm run dev:web   # http://localhost:3000
 ```
 
-Seed demo: `dono@demo.local` / `SenhaDemo123!` · slug `demo-barbearia` · booking em `/u/demo-barbearia`
+Guia completo: [docs/SETUP.md](./docs/SETUP.md) · Variáveis: [docs/ENV.md](./docs/ENV.md)
 
-```bash
-npm run test
+**Seed demo:** `dono@demo.local` / `SenhaDemo123!` · slug `demo-barbearia` · `/u/demo-barbearia`
+
+```powershell
 npm run lint
-npm run format:check
+npm run test
+npm run test:e2e -w @agenda-pro/api
 ```
 
-## Rotas principais
+## Capacidades principais
+
+- Booking público multi-profissional + manage link
+- Anti double-booking (lock + constraint + testes de corrida)
+- PIX (Mercado Pago) com webhook assinado e lifecycle
+- Billing Stripe fail-closed sem chave em produção
+- CRM: segmentos, métricas, loyalty ledger, retenção 30/60/90
+- LGPD: export + exclusão anonimizada
+- Notificações e-mail/WhatsApp (Evolution ou `wa.me`)
+- Health `/api/health` + ready `/api/health/ready`
+- Design system Graphite (acessível, mobile)
+
+## Rotas (amostra)
 
 | Área | Exemplos |
 |------|----------|
 | Auth | `POST /api/auth/register\|login\|refresh` · `GET /api/auth/me` |
-| Dashboard | `/api/services` · `/api/availability/rules` · `/api/appointments` |
-| Público | `GET /api/public/:slug` · `.../slots` · `POST .../book` |
-| Billing | `GET /api/billing/plans` · `POST .../checkout` · `POST .../cancel` |
-| LGPD | `DELETE /api/account` |
+| Público | `GET /api/public/:slug` · slots · book · manage token |
+| Agenda | `GET /api/appointments` → `{ items, total, page, pageSize }` |
+| CRM | `/api/clients` · consent · profile |
+| Billing | `/api/billing/*` |
+| LGPD | `GET /api/account/export` · `DELETE /api/account` |
+| Health | `/api/health` · `/api/health/ready` |
 
-## Docs
+Contratos: [docs/API.md](./docs/API.md) · Arquitetura: [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) · Segurança: [docs/SECURITY.md](./docs/SECURITY.md)
 
-- [Escopo Fase 0](./docs/FASE-0-ESCOPO.md)
-- [Deploy](./docs/DEPLOY.md)
-- [Case study checklist](./docs/CASE-STUDY-CHECKLIST.md)
-- [ADRs](./docs/adr/)
-- [Entrevista](./docs/ENTREVISTA-FASES-2-7.md)
+## Produção e ops
+
+| Doc | Tema |
+|-----|------|
+| [DEPLOYMENT.md](./DEPLOYMENT.md) | Checklist e topologias |
+| [BACKUP.md](./BACKUP.md) | Backup Postgres |
+| [DISASTER-RECOVERY.md](./DISASTER-RECOVERY.md) | RPO/RTO / runbooks |
+| [INFRASTRUCTURE-AUDIT.md](./INFRASTRUCTURE-AUDIT.md) | Auditoria infra |
+
+```powershell
+npm run docker:prod:up
+npm run db:backup:dry
+```
+
+## Git / GitHub Desktop
+
+Branch de hardening: `cursor/saas-hardening-crm-infra`.
+
+Se ainda não houver `origin`:
+
+1. Abra o repo no **GitHub Desktop** (`github .`)
+2. **Publish repository** / **Publish branch**
+3. Confirme com `git remote -v`
 
 ## Estrutura
 
 ```
-apps/api   NestJS + Prisma
-apps/web   Next.js (dashboard + /u/[slug] + planos/termos)
+apps/api     NestJS + Prisma + filas + PIX/billing
+apps/web     Next.js (dashboard + booking + design system)
+docs/        Documentação completa
+scripts/     Bootstrap, backup, restore
 ```
