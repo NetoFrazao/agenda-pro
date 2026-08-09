@@ -1,0 +1,326 @@
+// =============================================================================
+// Agenda Pro — Schema Prisma (Fase 1)
+//
+// Decisões principais:
+// - Multi-tenant por Tenant: todo dado de negócio carrega tenantId.
+// - Datas de agendamento em UTC (DateTime); fuso fica em Tenant/User.
+// - Preço do serviço é por Tenant (centavos), sem tabela global de preços.
+// - Planos com preços via env no app; aqui só a estrutura de limites/features.
+// - Anti double-booking: unique (professionalId, startsAt); overlap na Fase 3.
+// =============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// Conta do negócio (barbeiro autônomo, manicure ou pequeno salão).
+/// Isolamento multi-tenant começa aqui: queries de negócio SEMPRE filtram por tenantId.
+model Tenant {
+  id        String   @id @default(cuid())
+  /// Slug público da página de agendamento: /u/{slug}
+  slug      String   @unique @db.VarChar(64)
+  name      String   @db.VarChar(120)
+  /// IANA timezone do estabelecimento (ex: America/Sao_Paulo)
+  timezone  String   @default("America/Sao_Paulo") @db.VarChar(64)
+  /// Plano comercial atual (free no MVP até Fase 7)
+  plan      PlanCode @default(STARTER)
+  /// Soft-delete / LGPD: marca exclusão sem apagar auditoria imediata
+  deletedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users         User[]
+  services      Service[]
+  availability  AvailabilityRule[]
+  exceptions    AvailabilityException[]
+  clients       Client[]
+  appointments  Appointment[]
+  subscription  Subscription?
+
+  @@map("tenants")
+}
+
+enum PlanCode {
+  STARTER
+  PRO
+  BUSINESS
+}
+
+enum UserRole {
+  OWNER
+  MEMBER
+}
+
+/// Profissional (login do dashboard). No MVP 1:1 com Tenant; schema já permite N profissionais.
+model User {
+  id           String    @id @default(cuid())
+  tenantId     String
+  email        String    @db.VarChar(255)
+  passwordHash String
+  name         String    @db.VarChar(120)
+  phone        String?   @db.VarChar(32)
+  role         UserRole  @default(OWNER)
+  /// Fuso preferido na UI (pode diferir do Tenant, ex: dono viajando)
+  timezone     String?   @db.VarChar(64)
+  isActive     Boolean   @default(true)
+  deletedAt    DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  tenant              Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  appointments        Appointment[]
+  availabilityRules   AvailabilityRule[]
+  availabilityExceptions AvailabilityException[]
+  refreshTokens       RefreshToken[]
+
+  @@unique([tenantId, email])
+  @@index([tenantId])
+  @@map("users")
+}
+
+/// Refresh tokens rotativos (Fase 2). Modelados já na Fase 1 para evitar migration dolorosa.
+model RefreshToken {
+  id        String    @id @default(cuid())
+  userId    String
+  /// Hash do token (nunca armazenar o JWT/refresh em texto puro)
+  tokenHash String    @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+/// Serviço oferecido pelo profissional — preço e duração definidos por conta.
+model Service {
+  id              String    @id @default(cuid())
+  tenantId        String
+  name            String    @db.VarChar(120)
+  description     String?   @db.VarChar(500)
+  /// Duração em minutos (ex: 30, 45, 60)
+  durationMinutes Int
+  /// Preço em centavos BRL (ex: R$ 45,00 => 4500). Sem preço global do sistema.
+  priceCents      Int
+  /// Sinal/depósito opcional (Fase 7 / bônus). 0 = não exige.
+  depositCents    Int       @default(0)
+  isActive        Boolean   @default(true)
+  sortOrder       Int       @default(0)
+  deletedAt       DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  appointments Appointment[]
+
+  @@index([tenantId, isActive])
+  @@map("services")
+}
+
+/// Regra recorrente de disponibilidade (ex: Seg–Sex 09:00–18:00).
+/// startTime/endTime são "horário de parede" no timezone do Tenant (não UTC).
+model AvailabilityRule {
+  id              String @id @default(cuid())
+  tenantId        String
+  /// Profissional específico; null = aplica a todos do tenant (MVP usa o OWNER)
+  professionalId  String?
+  /// 0 = Domingo ... 6 = Sábado (mesmo convencionado do JS Date.getDay())
+  dayOfWeek       Int
+  /// Minutos desde meia-noite local (ex: 09:00 => 540)
+  startMinute     Int
+  /// Minutos desde meia-noite local (ex: 18:00 => 1080). Deve ser > startMinute.
+  endMinute       Int
+  isActive        Boolean @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  tenant       Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  professional User?  @relation(fields: [professionalId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, dayOfWeek, isActive])
+  @@index([professionalId])
+  @@map("availability_rules")
+}
+
+/// Exceção pontual: folga, feriado ou horário especial em uma data.
+model AvailabilityException {
+  id             String   @id @default(cuid())
+  tenantId       String
+  professionalId String?
+  /// Data civil no timezone do tenant (armazenada como date, sem hora)
+  date           DateTime @db.Date
+  /// false = dia inteiro bloqueado; true = janela especial (usa start/end)
+  isAvailable    Boolean  @default(false)
+  startMinute    Int?
+  endMinute      Int?
+  reason         String?  @db.VarChar(255)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  tenant       Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  professional User?  @relation(fields: [professionalId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, date])
+  @@index([professionalId, date])
+  @@map("availability_exceptions")
+}
+
+/// Cliente final (titular de dados pessoais — LGPD). Sempre scoped por tenant.
+model Client {
+  id        String    @id @default(cuid())
+  tenantId  String
+  name      String    @db.VarChar(120)
+  email     String?   @db.VarChar(255)
+  phone     String    @db.VarChar(32)
+  notes     String?   @db.Text
+  /// Consentimento para lembretes (WhatsApp/e-mail)
+  marketingOptIn Boolean @default(false)
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  appointments Appointment[]
+
+  @@index([tenantId, phone])
+  @@index([tenantId, email])
+  @@map("clients")
+}
+
+enum AppointmentStatus {
+  /// Aguardando sinal PIX (quando depositCents > 0) — Fase 7
+  PENDING_PAYMENT
+  SCHEDULED
+  CONFIRMED
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+}
+
+/// Agendamento. startsAt/endsAt SEMPRE em UTC.
+model Appointment {
+  id             String            @id @default(cuid())
+  tenantId       String
+  professionalId String
+  clientId       String
+  serviceId      String
+  startsAt       DateTime
+  endsAt         DateTime
+  status         AppointmentStatus @default(SCHEDULED)
+  /// Observação do cliente no momento do booking
+  customerNotes  String?           @db.VarChar(500)
+  /// Snapshot do preço no momento do agendamento (evita divergência se serviço mudar)
+  priceCentsSnapshot   Int
+  durationMinutesSnapshot Int
+  cancelledAt    DateTime?
+  cancelReason   String?           @db.VarChar(255)
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  tenant       Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  professional User    @relation(fields: [professionalId], references: [id], onDelete: Restrict)
+  client       Client  @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  service      Service @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, startsAt])
+  @@index([professionalId, startsAt])
+  @@index([clientId])
+  /// Impede dois bookings exatamente no mesmo start para o mesmo profissional
+  /// (camada 1). Overlap parcial é tratado com transaction + lock na Fase 3.
+  @@unique([professionalId, startsAt])
+  @@map("appointments")
+}
+
+/// Assinatura do SaaS (estrutura pronta; cobrança real na Fase 7).
+model Subscription {
+  id                   String             @id @default(cuid())
+  tenantId             String             @unique
+  plan                 PlanCode           @default(STARTER)
+  status               SubscriptionStatus @default(TRIALING)
+  /// Limite de agendamentos/mês no plano (null = ilimitado)
+  monthlyBookingLimit  Int?
+  currentPeriodStart   DateTime?
+  currentPeriodEnd     DateTime?
+  cancelAtPeriodEnd    Boolean            @default(false)
+  stripeCustomerId     String?            @unique
+  stripeSubscriptionId String?            @unique
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("subscriptions")
+}
+
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  CANCELED
+  INCOMPLETE
+}
+
+/// Catálogo de planos (features/limites). Preços finais ficam em env/Stripe Price IDs.
+model PlanDefinition {
+  id                  String   @id @default(cuid())
+  code                PlanCode @unique
+  name                String   @db.VarChar(64)
+  description         String?  @db.VarChar(255)
+  /// Placeholder; a aplicação lê PRICE_* do env / Stripe — não hardcodar preço de venda aqui
+  monthlyBookingLimit Int?
+  maxProfessionals    Int      @default(1)
+  whatsappReminders   Boolean  @default(false)
+  pixDepositEnabled   Boolean  @default(false)
+  isActive            Boolean  @default(true)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@map("plan_definitions")
+}
+
+/// Outbox / trilha de jobs assíncronos (e-mail, WhatsApp). Usado na Fase 4.
+model NotificationJob {
+  id          String                @id @default(cuid())
+  tenantId    String
+  appointmentId String?
+  type        NotificationJobType
+  channel     NotificationChannel
+  payload     Json
+  status      NotificationJobStatus @default(PENDING)
+  attempts    Int                   @default(0)
+  lastError   String?
+  scheduledFor DateTime             @default(now())
+  processedAt DateTime?
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
+
+  @@index([status, scheduledFor])
+  @@index([tenantId])
+  @@map("notification_jobs")
+}
+
+enum NotificationJobType {
+  BOOKING_CONFIRMATION
+  BOOKING_REMINDER
+  BOOKING_CANCELLED
+  WHATSAPP_REMINDER_LINK
+}
+
+enum NotificationChannel {
+  EMAIL
+  WHATSAPP
+}
+
+enum NotificationJobStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}

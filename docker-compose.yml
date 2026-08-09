@@ -1,0 +1,40 @@
+# Infra local: PostgreSQL + Redis
+# Uso: docker compose up -d
+# Nota: a API e o Web rodam no host (npm) para hot-reload mais simples no Windows.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: agenda-pro-postgres
+    restart: unless-stopped
+    ports:
+      - '${POSTGRES_PORT:-5432}:5432'
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-agenda}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-agenda_secret}
+      POSTGRES_DB: ${POSTGRES_DB:-agenda_pro}
+    volumes:
+      - agenda_pro_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: agenda-pro-redis
+    restart: unless-stopped
+    ports:
+      - '${REDIS_PORT:-6379}:6379'
+    volumes:
+      - agenda_pro_redis:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  agenda_pro_pgdata:
+  agenda_pro_redis:
