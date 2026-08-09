@@ -63,8 +63,11 @@ jobs:
       - name: Generate Prisma Client
         run: npm run db:generate
 
+      - name: Validate Prisma schema
+        run: npx prisma validate --schema apps/api/prisma/schema.prisma
+
       - name: Apply migrations
-        run: npm run db:migrate -w @agenda-pro/api
+        run: npm run db:migrate
 
       - name: Prettier check
         run: npm run format:check
@@ -77,3 +80,27 @@ jobs:
 
       - name: E2E (anti double-booking com Postgres real)
         run: npm run test:e2e -w @agenda-pro/api
+
+      - name: Build API (typecheck + emit)
+        run: npm run build -w @agenda-pro/api
+
+      - name: Build Web (next build)
+        run: npm run build -w @agenda-pro/web
+        env:
+          NEXT_PUBLIC_API_URL: http://localhost:3001
+          NEXT_PUBLIC_APP_URL: http://localhost:3000
+
+      - name: Dependency audit (high+)
+        run: npm audit --audit-level=high
+        continue-on-error: true
+
+  docker-api:
+    name: Docker build API
+    runs-on: ubuntu-latest
+    needs: lint-and-test
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build API image
+        run: docker build -f apps/api/Dockerfile -t agenda-pro-api:ci .

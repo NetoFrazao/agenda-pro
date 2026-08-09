@@ -1,6 +1,8 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { AppointmentStatus } from '@prisma/client';
+import { Type } from 'class-transformer';
 import {
+  IsBoolean,
   IsEmail,
   IsEnum,
   IsInt,
@@ -21,12 +23,12 @@ export class UpdateAppointmentStatusDto {
 }
 
 export class ListAppointmentsQueryDto {
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ description: 'Início do intervalo (ISO UTC). Recomendado.' })
   @IsOptional()
   @IsISO8601()
   from?: string;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ description: 'Fim do intervalo (ISO UTC). Recomendado.' })
   @IsOptional()
   @IsISO8601()
   to?: string;
@@ -35,6 +37,25 @@ export class ListAppointmentsQueryDto {
   @IsOptional()
   @IsString()
   professionalId?: string;
+
+  @ApiPropertyOptional({ default: 1 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  page?: number;
+
+  @ApiPropertyOptional({
+    default: 100,
+    maximum: 100,
+    description: 'Teto 100 (breaking vs take:500 implícito pré-Fase 7)',
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  pageSize?: number;
 }
 
 export class BookPublicDto {
@@ -73,6 +94,13 @@ export class BookPublicDto {
   @IsString()
   @MaxLength(500)
   notes?: string;
+
+  @ApiPropertyOptional({
+    description: 'Consentimento para lembretes/marketing (LGPD)',
+  })
+  @IsOptional()
+  @IsBoolean()
+  marketingOptIn?: boolean;
 }
 
 export class RescheduleDto {

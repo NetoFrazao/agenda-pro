@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { SiteFooter, SiteHeader } from '@/components/SiteChrome';
-import { Alert, EmptyState, Spinner } from '@/components/ui';
+import { Alert, Badge, Button, EmptyState, Spinner } from '@/components/ui';
 import { api, ApiError } from '@/lib/api';
 import { formatBRL, PLAN_PRICE_PLACEHOLDERS } from '@/lib/format';
 import type { PlanDefinition } from '@/lib/types';
@@ -65,13 +65,15 @@ export default function PlanosPage() {
     <div className="flex min-h-screen flex-col bg-atmosphere">
       <SiteHeader />
       <main className="mx-auto w-full max-w-5xl flex-1 px-6 py-12 sm:px-10">
-        <h1 className="font-display text-4xl font-semibold text-stone-900">Planos</h1>
-        <p className="mt-3 max-w-2xl text-lg text-stone-600">
-          Escolha o ritmo do seu negócio. Você pode começar e evoluir quando a agenda crescer.
-        </p>
+        <div className="max-w-2xl">
+          <h1 className="font-display text-4xl font-semibold tracking-tight text-ink">Planos</h1>
+          <p className="mt-3 text-lg leading-relaxed text-[#6b736e]">
+            Escolha o ritmo do seu negócio. Você pode começar e evoluir quando a agenda crescer.
+          </p>
+        </div>
 
         {warning ? (
-          <div className="mt-6">
+          <div className="mt-6 max-w-2xl">
             <Alert tone="info">{warning}</Alert>
           </div>
         ) : null}
@@ -88,41 +90,79 @@ export default function PlanosPage() {
           <ul className="mt-10 grid gap-5 sm:grid-cols-3">
             {plans.map((plan) => {
               const price = plan.priceCentsMonthly ?? PLAN_PRICE_PLACEHOLDERS[plan.code] ?? null;
+              const isFeatured = plan.code === 'PRO';
               return (
                 <li
                   key={plan.code}
-                  className="flex flex-col rounded-lg bg-white/90 p-6 ring-1 ring-stone-200"
+                  className={`flex flex-col rounded-2xl p-6 ${
+                    isFeatured
+                      ? 'bg-ink text-white shadow-[0_24px_48px_-24px_rgba(14,17,16,0.55)]'
+                      : 'surface-elevated'
+                  }`}
                 >
-                  <h2 className="font-display text-2xl font-semibold text-stone-900">
+                  {isFeatured ? (
+                    <Badge tone="emerald">
+                      <span className="text-mint">Mais popular</span>
+                    </Badge>
+                  ) : null}
+                  <h2
+                    className={`mt-2 font-display text-2xl font-semibold ${isFeatured ? 'text-white' : 'text-ink'}`}
+                  >
                     {plan.name}
                   </h2>
                   {price != null ? (
-                    <p className="mt-3 text-3xl font-semibold text-emerald-800">
+                    <p
+                      className={`mt-3 font-display text-3xl font-semibold ${isFeatured ? 'text-mint-glow' : 'text-teal-800'}`}
+                    >
                       {formatBRL(price)}
-                      <span className="text-base font-normal text-stone-500">/mês</span>
+                      <span
+                        className={`text-base font-normal ${isFeatured ? 'text-white/50' : 'text-[#6b736e]'}`}
+                      >
+                        /mês
+                      </span>
                     </p>
                   ) : null}
                   {plan.description ? (
-                    <p className="mt-3 text-sm text-stone-600">{plan.description}</p>
+                    <p
+                      className={`mt-3 text-sm leading-relaxed ${isFeatured ? 'text-white/60' : 'text-[#6b736e]'}`}
+                    >
+                      {plan.description}
+                    </p>
                   ) : null}
-                  <ul className="mt-5 flex-1 space-y-2 text-sm text-stone-600">
-                    <li>
+                  <ul
+                    className={`mt-5 flex-1 space-y-2.5 text-sm ${isFeatured ? 'text-white/70' : 'text-[#6b736e]'}`}
+                  >
+                    <li className="flex items-start gap-2">
+                      <span className={isFeatured ? 'text-mint' : 'text-teal-800'} aria-hidden>
+                        ✓
+                      </span>
                       {plan.monthlyBookingLimit == null
                         ? 'Agendamentos ilimitados'
                         : `Até ${plan.monthlyBookingLimit} agendamentos/mês`}
                     </li>
-                    {plan.whatsappReminders ? (
-                      <li>Lembretes por WhatsApp</li>
-                    ) : (
-                      <li>Lembretes por e-mail</li>
-                    )}
-                    {plan.pixDepositEnabled ? <li>Sinal via PIX</li> : null}
+                    <li className="flex items-start gap-2">
+                      <span className={isFeatured ? 'text-mint' : 'text-teal-800'} aria-hidden>
+                        ✓
+                      </span>
+                      {plan.whatsappReminders ? 'Lembretes por WhatsApp' : 'Lembretes por e-mail'}
+                    </li>
+                    {plan.pixDepositEnabled ? (
+                      <li className="flex items-start gap-2">
+                        <span className={isFeatured ? 'text-mint' : 'text-teal-800'} aria-hidden>
+                          ✓
+                        </span>
+                        Sinal via PIX
+                      </li>
+                    ) : null}
                   </ul>
-                  <Link
-                    href="/register"
-                    className="mt-6 inline-flex justify-center rounded-md bg-emerald-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-800"
-                  >
-                    Começar
+                  <Link href="/register" className="mt-6 block">
+                    <Button
+                      fullWidth
+                      variant={isFeatured ? 'primary' : 'secondary'}
+                      className={isFeatured ? 'bg-mint text-ink hover:bg-mint-glow' : ''}
+                    >
+                      Começar
+                    </Button>
                   </Link>
                 </li>
               );

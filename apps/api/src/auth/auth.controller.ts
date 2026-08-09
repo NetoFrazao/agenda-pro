@@ -69,7 +69,8 @@ export class AuthController {
   async register(@Body() dto: RegisterDto, @Res({ passthrough: true }) res: Response) {
     const result = await this.auth.register(dto);
     this.setAuthCookies(res, result);
-    return result;
+    // Tokens só no cookie httpOnly — body sem JWT (mitiga XSS lendo a resposta)
+    return { user: result.user, tenant: result.tenant };
   }
 
   @Post('login')
@@ -78,7 +79,7 @@ export class AuthController {
   async login(@Body() dto: LoginDto, @Res({ passthrough: true }) res: Response) {
     const result = await this.auth.login(dto);
     this.setAuthCookies(res, result);
-    return result;
+    return { user: result.user, tenant: result.tenant };
   }
 
   @Post('refresh')
@@ -94,7 +95,7 @@ export class AuthController {
     }
     const result = await this.auth.refresh(token);
     this.setAuthCookies(res, result);
-    return result;
+    return { user: result.user, tenant: result.tenant };
   }
 
   @Post('logout')
@@ -116,7 +117,7 @@ export class AuthController {
   @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @ApiOperation({ summary: 'Envia link de redefinição de senha por e-mail' })
   forgotPassword(@Body() dto: ForgotPasswordDto) {
-    return this.auth.forgotPassword(dto.email);
+    return this.auth.forgotPassword(dto.email, dto.tenantSlug);
   }
 
   @Post('reset-password')

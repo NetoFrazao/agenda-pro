@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { WaitlistStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { JoinWaitlistDto } from '../appointments/dto/appointment.dto';
@@ -13,6 +13,17 @@ export class WaitlistService {
       select: { id: true },
     });
     if (!tenant) throw new NotFoundException('Profissional não encontrado');
+
+    // M-02: serviceId opcional, mas se enviado precisa existir no tenant
+    if (dto.serviceId) {
+      const service = await this.prisma.service.findFirst({
+        where: { id: dto.serviceId, tenantId: tenant.id, deletedAt: null },
+        select: { id: true },
+      });
+      if (!service) {
+        throw new BadRequestException('Serviço inválido para este estabelecimento');
+      }
+    }
 
     // Mesmo telefone + mesmo dia = atualiza em vez de duplicar
     const existing = await this.prisma.waitlistEntry.findFirst({
@@ -48,6 +59,17 @@ export class WaitlistService {
         status: { in: [WaitlistStatus.WAITING, WaitlistStatus.NOTIFIED] },
       },
       orderBy: [{ dateKey: 'asc' }, { createdAt: 'asc' }],
+      take: 200,
+      select: {
+        id: true,
+        dateKey: true,
+        serviceId: true,
+        clientName: true,
+        clientPhone: true,
+        clientEmail: true,
+        status: true,
+        createdAt: true,
+      },
     });
   }
 

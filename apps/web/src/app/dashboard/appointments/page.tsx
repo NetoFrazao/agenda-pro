@@ -11,12 +11,19 @@ import {
   PageTitle,
   Select,
   Spinner,
+  StatusBadge,
 } from '@/components/ui';
 import { api, ApiError } from '@/lib/api';
-import { APPOINTMENT_STATUS_LABEL, formatDateTime, type BadgeTone } from '@/lib/format';
+import {
+  APPOINTMENT_STATUS_LABEL,
+  formatDateTime,
+  whatsappLink,
+  type BadgeTone,
+} from '@/lib/format';
 import type {
   Appointment,
   AppointmentStatus,
+  AppointmentStatusUpdateResult,
   AuthUserPayload,
   PixChargeStatus,
   TeamMember,
@@ -63,6 +70,14 @@ export default function AppointmentsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [rebookingHint, setRebookingHint] = useState<{
+    appointmentId: string;
+    clientName: string;
+    clientPhone: string;
+    clientId?: string;
+    message: string;
+    serviceName?: string;
+  } | null>(null);
 
   async function load(rangeFrom = from, rangeTo = to, filterProfessional = professionalId) {
     setError(null);
@@ -72,10 +87,10 @@ export default function AppointmentsPage() {
     if (filterProfessional) qs.set('professionalId', filterProfessional);
     const [me, data] = await Promise.all([
       api<AuthUserPayload>('/api/auth/me'),
-      api<Appointment[]>(`/api/appointments?${qs.toString()}`),
+      api<Appointment[] | { items: Appointment[] }>(`/api/appointments?${qs.toString()}`),
     ]);
     setTimezone(me.tenant?.timezone);
-    setItems(Array.isArray(data) ? data : []);
+    setItems(Array.isArray(data) ? data : (data?.items ?? []));
   }
 
   useEffect(() => {
@@ -105,7 +120,24 @@ export default function AppointmentsPage() {
     setUpdatingId(id);
     setError(null);
     try {
-      await api(`/api/appointments/${id}/status`, { method: 'PATCH', body: { status } });
+      const current = items.find((a) => a.id === id);
+      const result = await api<AppointmentStatusUpdateResult>(`/api/appointments/${id}/status`, {
+        method: 'PATCH',
+        body: { status },
+      });
+      if (status === 'COMPLETED' && result.rebookingSuggested && result.rebooking) {
+        const phone = current?.client?.phone ?? '';
+        setRebookingHint({
+          appointmentId: id,
+          clientName: current?.client?.name || 'Cliente',
+          clientPhone: phone,
+          clientId: result.rebooking.clientId || current?.client?.id,
+          message: result.rebooking.message,
+          serviceName: result.rebooking.serviceName,
+        });
+      } else if (rebookingHint?.appointmentId === id) {
+        setRebookingHint(null);
+      }
       await load();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Não foi possível atualizar o status.');
@@ -118,13 +150,13 @@ export default function AppointmentsPage() {
   const hasMultipleProfessionals = team.length > 1;
 
   return (
-    <div>
+    <div className="animate-fade-up">
       <PageTitle
-        title="Agendamentos"
+        title="Agenda"
         description="Acompanhe e atualize o status dos horários marcados."
       />
 
-      <div className="mb-6 flex flex-col gap-3 rounded-lg bg-white/80 p-4 ring-1 ring-stone-200 sm:flex-row sm:items-end">
+      <div className="surface-elevated mb-6 flex flex-col gap-3 rounded-2xl p-4 sm:flex-row sm:items-end">
         <Field label="De" id="from">
           <Input id="from" type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
         </Field>
@@ -147,7 +179,7 @@ export default function AppointmentsPage() {
             </Select>
           </Field>
         ) : null}
-        <Button type="button" onClick={() => void applyFilter()} disabled={loading}>
+        <Button type="button" onClick={() => void applyFilter()} loading={loading}>
           Filtrar
         </Button>
       </div>
@@ -158,38 +190,81 @@ export default function AppointmentsPage() {
         </div>
       ) : null}
 
+      {rebookingHint ? (
+        <div className="surface-elevated mb-4 flex flex-col gap-3 rounded-2xl p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-sm font-semibold text-ink">Sugestão de remarcação</p>
+            <p className="mt-1 text-sm text-muted">
+              {rebookingHint.message}
+              {rebookingHint.serviceName ? ` (${rebookingHint.serviceName})` : ''} —{' '}
+              {rebookingHint.clientName}
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {rebookingHint.clientPhone ? (
+              <a
+                href={`${whatsappLink(rebookingHint.clientPhone)}?text=${encodeURIComponent(
+                  `Oi ${rebookingHint.clientName.split(' ')[0]}! Quer remarcar seu próximo horário${
+                    rebookingHint.serviceName ? ` de ${rebookingHint.serviceName}` : ''
+                  }?`,
+                )}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center justify-center rounded-xl bg-mint-deep px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90"
+              >
+                Remarcar no WhatsApp
+              </a>
+            ) : null}
+            {rebookingHint.clientId ? (
+              <a
+                href={`/dashboard/clients`}
+                className="inline-flex items-center justify-center rounded-xl border border-paper-2 bg-paper px-4 py-2 text-sm font-semibold text-ink transition hover:border-mint-deep/40"
+              >
+                Ver clientes
+              </a>
+            ) : null}
+            <Button type="button" variant="ghost" onClick={() => setRebookingHint(null)}>
+              Dispensar
+            </Button>
+          </div>
+        </div>
+      ) : null}
+
       {loading ? (
-        <Spinner />
+        <Spinner label="Carregando agenda…" />
       ) : sorted.length === 0 ? (
-        <EmptyState>Nenhum agendamento neste período.</EmptyState>
+        <EmptyState title="Nenhum horário neste período">
+          Ajuste o filtro de datas ou compartilhe seu link público.
+        </EmptyState>
       ) : (
         <ul className="space-y-3">
           {sorted.map((a) => {
             const pixBadge = a.pixCharge ? PIX_BADGE[a.pixCharge.status] : null;
             return (
-              <li key={a.id} className="rounded-lg bg-white p-4 ring-1 ring-stone-200">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                  <div>
-                    <p className="flex flex-wrap items-center gap-2 font-semibold text-stone-900">
-                      {a.client?.name || 'Cliente'}
+              <li key={a.id} className="surface-elevated rounded-2xl p-4 sm:p-5">
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="font-semibold text-ink">{a.client?.name || 'Cliente'}</p>
+                      <StatusBadge status={a.status} />
                       {pixBadge ? <Badge tone={pixBadge.tone}>{pixBadge.label}</Badge> : null}
-                    </p>
-                    <p className="text-sm text-stone-600">
+                    </div>
+                    <p className="mt-1.5 text-sm text-muted">
                       {a.service?.name || 'Serviço'} · {formatDateTime(a.startsAt, timezone)}
                       {hasMultipleProfessionals && a.professional?.name
                         ? ` · ${a.professional.name}`
                         : ''}
                     </p>
                     {a.client?.phone ? (
-                      <p className="mt-1 text-sm text-stone-500">{a.client.phone}</p>
+                      <p className="mt-1 text-sm text-ink-muted">{a.client.phone}</p>
                     ) : null}
                     {a.customerNotes ? (
-                      <p className="mt-2 text-sm text-stone-600">Obs.: {a.customerNotes}</p>
+                      <p className="mt-2 text-sm text-muted">Obs.: {a.customerNotes}</p>
                     ) : null}
                   </div>
-                  <div className="min-w-[12rem]">
-                    <label htmlFor={`status-${a.id}`} className="sr-only">
-                      Status do agendamento
+                  <div className="w-full sm:min-w-[12rem] sm:max-w-[14rem]">
+                    <label htmlFor={`status-${a.id}`} className="mb-1.5 block text-xs font-medium text-muted">
+                      Alterar status
                     </label>
                     <Select
                       id={`status-${a.id}`}

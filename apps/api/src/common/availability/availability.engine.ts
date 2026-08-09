@@ -7,6 +7,8 @@
 import { AppointmentStatus } from '@prisma/client';
 import { getZonedParts } from '../time/timezone';
 
+export { dateOnlyToDateKey } from '../time/timezone';
+
 export type AvailabilityRuleLike = {
   dayOfWeek: number;
   startMinute: number;
@@ -173,4 +175,11 @@ export function hasOverlap(
       new Date(b.endsAt.getTime() + bufferMs),
     ),
   );
+}
+
+/** Início do mês civil no timezone do tenant (limite mensal de bookings — M-04). */
+export function startOfMonthInTimeZone(now: Date, timeZone: string): Date {
+  const { year, month } = getZonedParts(now, timeZone);
+  const dateKey = `${year}-${String(month).padStart(2, '0')}-01`;
+  return zonedCivilToUtc(dateKey, 0, timeZone);
 }

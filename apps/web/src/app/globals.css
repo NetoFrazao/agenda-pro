@@ -1,16 +1,68 @@
 @import 'tailwindcss';
 
+/*
+  Graphite Studio — Agenda Pro design tokens
+  Syne (display) + DM Sans (body) · ink / mint / brass / paper
+*/
 @theme {
-  --color-stone-25: #fafaf9;
-  --color-brand-50: #ecfdf5;
-  --color-brand-100: #d1fae5;
-  --color-brand-600: #059669;
-  --color-brand-700: #047857;
-  --color-brand-800: #065f46;
-  --color-ink: #1c1917;
-  --color-muted: #78716c;
-  --font-display: var(--font-display), ui-serif, Georgia, serif;
+  /* Color */
+  --color-ink: #0e1110;
+  --color-ink-soft: #1a1f1d;
+  --color-ink-muted: #3f4742;
+  --color-paper: #f4f6f3;
+  --color-paper-2: #e8ece7;
+  --color-mint: #2dd4a8;
+  --color-mint-deep: #0f766e;
+  --color-mint-glow: #5eead4;
+  --color-brass: #d4b483;
+  --color-muted: #6b736e;
+  --color-muted-soft: #9aa39c;
+  --color-line: #d5dbd6;
+  --color-danger: #b91c1c;
+  --color-danger-bg: #fef2f2;
+  --color-danger-border: #fecaca;
+  --color-success-bg: #f0fdfa;
+  --color-success-border: #99f6e4;
+  --color-warning-bg: #fffbeb;
+  --color-warning-border: #fde68a;
+
+  /* Typography */
+  --font-display: var(--font-display), ui-sans-serif, system-ui, sans-serif;
   --font-sans: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+
+  /* Radius */
+  --radius-sm: 0.5rem;
+  --radius-md: 0.75rem;
+  --radius-lg: 1rem;
+  --radius-xl: 1.25rem;
+  --radius-2xl: 1.5rem;
+
+  /* Shadow */
+  --shadow-soft: 0 1px 0 rgb(14 17 16 / 0.03);
+  --shadow-elevated:
+    0 1px 0 rgb(14 17 16 / 0.04),
+    0 18px 40px -24px rgb(14 17 16 / 0.35);
+  --shadow-modal: 0 30px 80px -28px rgb(14 17 16 / 0.55);
+  --shadow-nav: 0 8px 32px -16px rgb(14 17 16 / 0.2);
+
+  /* Motion */
+  --ease-out-expo: cubic-bezier(0.22, 1, 0.36, 1);
+  --duration-fast: 150ms;
+  --duration-base: 250ms;
+  --duration-slow: 700ms;
+
+  /* Z-index scale */
+  --z-base: 1;
+  --z-sticky: 20;
+  --z-nav: 40;
+  --z-modal: 50;
+  --z-toast: 60;
+}
+
+:root {
+  --touch-min: 2.75rem; /* 44px */
+  --page-max: 80rem;
+  --content-narrow: 42rem;
 }
 
 @layer base {
@@ -20,35 +72,192 @@
 
   body {
     font-family: var(--font-sans);
-    background-color: #f5f5f4;
+    background-color: var(--color-paper);
     color: var(--color-ink);
+    -webkit-font-smoothing: antialiased;
   }
 
   :focus-visible {
-    outline: 2px solid var(--color-brand-700);
+    outline: 2px solid var(--color-mint-deep);
     outline-offset: 2px;
   }
 
   ::selection {
-    background: var(--color-brand-100);
-    color: var(--color-brand-800);
+    background: color-mix(in oklab, var(--color-mint) 35%, white);
+    color: var(--color-ink);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
   }
 }
 
 @layer utilities {
   .font-display {
     font-family: var(--font-display);
-  }
-
-  .bg-atmosphere {
-    background-color: #f5f5f4;
-    background-image:
-      radial-gradient(ellipse 80% 50% at 10% -10%, rgb(209 250 229 / 0.55), transparent 55%),
-      radial-gradient(ellipse 60% 40% at 100% 0%, rgb(231 229 228 / 0.9), transparent 50%),
-      linear-gradient(180deg, #fafaf9 0%, #f5f5f4 40%, #e7e5e4 100%);
+    letter-spacing: -0.03em;
   }
 
   .text-balance {
     text-wrap: balance;
+  }
+
+  .text-muted {
+    color: var(--color-muted);
+  }
+
+  .text-ink-muted {
+    color: var(--color-ink-muted);
+  }
+
+  /* App / dashboard atmosphere */
+  .bg-atmosphere {
+    background-color: #f1f4f0;
+    background-image:
+      radial-gradient(ellipse 90% 55% at 0% -10%, rgb(45 212 168 / 0.14), transparent 55%),
+      radial-gradient(ellipse 70% 45% at 100% 0%, rgb(212 180 131 / 0.12), transparent 50%),
+      linear-gradient(165deg, #f8faf7 0%, #f1f4f0 45%, #e6ebe4 100%);
+  }
+
+  /* Marketing / auth dark plane */
+  .bg-ink-stage {
+    background-color: var(--color-ink);
+    background-image:
+      radial-gradient(ellipse 80% 60% at 85% 10%, rgb(45 212 168 / 0.18), transparent 55%),
+      radial-gradient(ellipse 50% 40% at 10% 80%, rgb(212 180 131 / 0.1), transparent 50%),
+      linear-gradient(160deg, #0e1110 0%, #141a18 50%, #0e1110 100%);
+  }
+
+  .glass-panel {
+    background: color-mix(in oklab, white 78%, transparent);
+    backdrop-filter: blur(16px);
+    border: 1px solid color-mix(in oklab, white 55%, var(--color-line));
+  }
+
+  .glass-dark {
+    background: color-mix(in oklab, var(--color-ink-soft) 72%, transparent);
+    backdrop-filter: blur(18px);
+    border: 1px solid color-mix(in oklab, white 10%, transparent);
+  }
+
+  .surface {
+    background: color-mix(in oklab, white 88%, var(--color-paper));
+    border: 1px solid var(--color-line);
+    box-shadow: var(--shadow-soft);
+  }
+
+  .surface-elevated {
+    background: white;
+    border: 1px solid var(--color-line);
+    box-shadow: var(--shadow-elevated);
+  }
+
+  .mesh-grid {
+    background-image:
+      linear-gradient(rgb(255 255 255 / 0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgb(255 255 255 / 0.03) 1px, transparent 1px);
+    background-size: 48px 48px;
+  }
+
+  .touch-target {
+    min-height: var(--touch-min);
+    min-width: var(--touch-min);
+  }
+
+  .animate-fade-up {
+    animation: fadeUp var(--duration-slow) var(--ease-out-expo) both;
+  }
+
+  .animate-fade-up-delay-1 {
+    animation: fadeUp 0.75s var(--ease-out-expo) 0.08s both;
+  }
+
+  .animate-fade-up-delay-2 {
+    animation: fadeUp 0.8s var(--ease-out-expo) 0.16s both;
+  }
+
+  .animate-fade-up-delay-3 {
+    animation: fadeUp 0.85s var(--ease-out-expo) 0.24s both;
+  }
+
+  .animate-float {
+    animation: floatY 7s ease-in-out infinite;
+  }
+
+  .animate-shine {
+    background-size: 200% 100%;
+    animation: shine 4.5s linear infinite;
+  }
+
+  .animate-skeleton {
+    animation: skeletonPulse 1.4s ease-in-out infinite;
+  }
+
+  .slot-chip {
+    transition:
+      transform var(--duration-fast) ease,
+      background-color var(--duration-fast) ease,
+      color var(--duration-fast) ease,
+      box-shadow var(--duration-fast) ease;
+  }
+
+  .slot-chip:hover:not(:disabled) {
+    transform: translateY(-1px);
+  }
+
+  .slot-chip[data-selected='true'] {
+    background: var(--color-ink);
+    color: white;
+    box-shadow: 0 10px 24px -12px rgb(14 17 16 / 0.55);
+  }
+}
+
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes floatY {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+@keyframes shine {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+@keyframes skeletonPulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
   }
 }

@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useId, useState, type ReactNode } from 'react';
 import { api } from '@/lib/api';
 import { clearSessionFlag, hasSession } from '@/lib/auth';
 import { BrandLogo } from './BrandLogo';
@@ -10,16 +10,16 @@ import { Button, Spinner } from './ui';
 
 const NAV = [
   { href: '/dashboard', label: 'Visão geral', exact: true },
-  { href: '/dashboard/services', label: 'Serviços' },
-  { href: '/dashboard/availability', label: 'Disponibilidade' },
-  { href: '/dashboard/appointments', label: 'Agendamentos' },
-  { href: '/dashboard/reports', label: 'Relatórios' },
+  { href: '/dashboard/appointments', label: 'Agenda' },
   { href: '/dashboard/clients', label: 'Clientes' },
+  { href: '/dashboard/services', label: 'Serviços' },
+  { href: '/dashboard/availability', label: 'Horários' },
   { href: '/dashboard/team', label: 'Equipe' },
-  { href: '/dashboard/waitlist', label: 'Lista de espera' },
+  { href: '/dashboard/reports', label: 'Relatórios' },
+  { href: '/dashboard/waitlist', label: 'Espera' },
   { href: '/dashboard/reviews', label: 'Avaliações' },
-  { href: '/dashboard/billing', label: 'Planos e cobrança' },
-  { href: '/dashboard/settings', label: 'Configurações' },
+  { href: '/dashboard/billing', label: 'Planos' },
+  { href: '/dashboard/settings', label: 'Ajustes' },
 ];
 
 function navActive(pathname: string, href: string, exact?: boolean) {
@@ -32,11 +32,27 @@ export function AuthGuard({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    if (!hasSession()) {
-      router.replace('/login');
-      return;
+    let cancelled = false;
+
+    async function probeSession() {
+      // A-06: flag localStorage é só hint; autoridade real = cookie via /auth/me
+      if (!hasSession()) {
+        router.replace('/login');
+        return;
+      }
+      try {
+        await api('/api/auth/me');
+        if (!cancelled) setReady(true);
+      } catch {
+        clearSessionFlag();
+        if (!cancelled) router.replace('/login');
+      }
     }
-    setReady(true);
+
+    void probeSession();
+    return () => {
+      cancelled = true;
+    };
   }, [router]);
 
   if (!ready) {
@@ -53,13 +69,35 @@ export function AuthGuard({ children }: { children: ReactNode }) {
 export function DashboardShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
+  const navId = useId();
   const [menuOpen, setMenuOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
+
+  useEffect(() => {
+    setMenuOpen(false);
+  }, [pathname]);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') setMenuOpen(false);
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [menuOpen]);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [menuOpen]);
 
   async function handleLogout() {
     setLoggingOut(true);
     try {
-      // O cookie ap_refresh identifica a sessão; o backend revoga e limpa cookies.
       await api('/api/auth/logout', { method: 'POST', body: {} }).catch(() => null);
     } finally {
       clearSessionFlag();
@@ -70,24 +108,38 @@ export function DashboardShell({ children }: { children: ReactNode }) {
   return (
     <AuthGuard>
       <div className="min-h-screen bg-atmosphere">
-        <div className="mx-auto flex min-h-screen max-w-6xl flex-col md:flex-row">
-          <aside className="border-b border-stone-200/80 bg-white/70 backdrop-blur md:w-64 md:border-b-0 md:border-r">
-            <div className="flex items-center justify-between gap-3 px-5 py-4">
+        <div className="mx-auto flex min-h-screen max-w-7xl flex-col md:flex-row">
+          {/* Mobile overlay */}
+          {menuOpen ? (
+            <button
+              type="button"
+              className="fixed inset-0 z-40 bg-ink/40 backdrop-blur-[1px] md:hidden"
+              aria-label="Fechar menu"
+              onClick={() => setMenuOpen(false)}
+            />
+          ) : null}
+
+          <aside
+            className={`relative z-40 border-b border-line/80 bg-white/80 backdrop-blur-xl md:z-10 md:w-[15.5rem] md:shrink-0 md:border-b-0 md:border-r ${
+              menuOpen ? 'shadow-[var(--shadow-nav)]' : ''
+            }`}
+          >
+            <div className="flex items-center justify-between gap-3 px-5 py-4 md:py-5">
               <BrandLogo href="/dashboard" size="sm" />
               <button
                 type="button"
-                className="rounded-md px-2 py-1 text-sm font-medium text-stone-700 ring-1 ring-stone-300 md:hidden"
+                className="touch-target inline-flex items-center justify-center rounded-xl px-3 text-sm font-medium text-ink-muted ring-1 ring-line md:hidden"
                 aria-expanded={menuOpen}
-                aria-controls="dashboard-nav"
+                aria-controls={navId}
                 onClick={() => setMenuOpen((v) => !v)}
               >
-                Menu
+                {menuOpen ? 'Fechar' : 'Menu'}
               </button>
             </div>
             <nav
-              id="dashboard-nav"
+              id={navId}
               aria-label="Dashboard"
-              className={`${menuOpen ? 'block' : 'hidden'} space-y-1 px-3 pb-4 md:block`}
+              className={`${menuOpen ? 'block' : 'hidden'} max-h-[min(70vh,28rem)] space-y-0.5 overflow-y-auto px-3 pb-5 md:block md:max-h-none`}
             >
               {NAV.map((item) => {
                 const active = navActive(pathname, item.href, item.exact);
@@ -96,10 +148,10 @@ export function DashboardShell({ children }: { children: ReactNode }) {
                     key={item.href}
                     href={item.href}
                     onClick={() => setMenuOpen(false)}
-                    className={`block rounded-md px-3 py-2 text-sm font-medium ${
+                    className={`flex min-h-11 items-center rounded-xl px-3 py-2.5 text-[13px] font-medium transition ${
                       active
-                        ? 'bg-emerald-50 text-emerald-900'
-                        : 'text-stone-600 hover:bg-stone-100 hover:text-stone-900'
+                        ? 'bg-ink text-white shadow-sm'
+                        : 'text-[#4b534e] hover:bg-black/[0.035] hover:text-ink'
                     }`}
                     aria-current={active ? 'page' : undefined}
                   >
@@ -107,20 +159,20 @@ export function DashboardShell({ children }: { children: ReactNode }) {
                   </Link>
                 );
               })}
-              <div className="pt-3">
+              <div className="border-t border-line/70 pt-4">
                 <Button
                   variant="ghost"
                   fullWidth
-                  disabled={loggingOut}
+                  loading={loggingOut}
                   onClick={handleLogout}
-                  className="justify-start"
+                  className="justify-start text-muted"
                 >
                   {loggingOut ? 'Saindo…' : 'Sair'}
                 </Button>
               </div>
             </nav>
           </aside>
-          <main className="flex-1 px-5 py-8 sm:px-8">{children}</main>
+          <main className="flex-1 px-5 py-8 sm:px-8 lg:px-10">{children}</main>
         </div>
       </div>
     </AuthGuard>

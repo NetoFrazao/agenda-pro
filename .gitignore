@@ -37,3 +37,6 @@ apps/api/prisma/*.db-journal
 tmp/
 .turbo/
 *.pem
+
+# DB backups locais (scripts/backup-postgres*)
+backups/

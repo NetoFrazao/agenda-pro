@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { RedisCacheService } from '../common/cache/redis-cache.service';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   UpdateBookingSettingsDto,
@@ -8,7 +9,10 @@ import {
 
 @Injectable()
 export class SettingsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cache: RedisCacheService,
+  ) {}
 
   get(tenantId: string) {
     return this.prisma.tenant.findUniqueOrThrow({
@@ -34,17 +38,28 @@ export class SettingsService {
   }
 
   async updateProfile(tenantId: string, dto: UpdateProfileSettingsDto) {
-    await this.prisma.tenant.update({ where: { id: tenantId }, data: dto });
+    const updated = await this.prisma.tenant.update({
+      where: { id: tenantId },
+      data: dto,
+      select: { slug: true },
+    });
+    await this.cache.invalidatePublicProfile(updated.slug);
     return this.get(tenantId);
   }
 
   async updateBooking(tenantId: string, dto: UpdateBookingSettingsDto) {
-    await this.prisma.tenant.update({ where: { id: tenantId }, data: dto });
+    const updated = await this.prisma.tenant.update({
+      where: { id: tenantId },
+      data: dto,
+      select: { slug: true },
+    });
+    await this.cache.invalidatePublicProfile(updated.slug);
     return this.get(tenantId);
   }
 
   async updateLoyalty(tenantId: string, dto: UpdateLoyaltySettingsDto) {
     await this.prisma.tenant.update({ where: { id: tenantId }, data: dto });
+    // Loyalty não entra no perfil público — sem invalidar
     return this.get(tenantId);
   }
 }

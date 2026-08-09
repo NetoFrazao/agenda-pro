@@ -10,6 +10,7 @@ import * as nodemailer from 'nodemailer';
 import { EnvService } from '../config/env.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { WhatsAppProvider } from './whatsapp.provider';
+import { planAllowsWhatsappReminders } from '../billing/plan-entitlements';
 
 const QUEUE_NAME = 'notifications';
 
@@ -116,22 +117,24 @@ export class NotificationsService implements OnModuleDestroy {
         `${appointment.service.name} em ${when}. ` +
         `Confirme ou remarque aqui: ${manageUrl}`;
 
-      await this.createAndEnqueue(
-        {
-          tenantId: appointment.tenantId,
-          appointmentId: appointment.id,
-          type: NotificationJobType.BOOKING_REMINDER,
-          channel: NotificationChannel.WHATSAPP,
-          scheduledFor,
-          payload: {
-            phone: appointment.client.phone,
-            message: reminderText,
-            waLink: this.buildWaLink(appointment.client.phone, reminderText),
+      if (planAllowsWhatsappReminders(appointment.tenant.plan)) {
+        await this.createAndEnqueue(
+          {
+            tenantId: appointment.tenantId,
             appointmentId: appointment.id,
+            type: NotificationJobType.BOOKING_REMINDER,
+            channel: NotificationChannel.WHATSAPP,
+            scheduledFor,
+            payload: {
+              phone: appointment.client.phone,
+              message: reminderText,
+              waLink: this.buildWaLink(appointment.client.phone, reminderText),
+              appointmentId: appointment.id,
+            },
           },
-        },
-        delayMs,
-      );
+          delayMs,
+        );
+      }
 
       if (appointment.client.email) {
         await this.createAndEnqueue(
@@ -219,16 +222,22 @@ export class NotificationsService implements OnModuleDestroy {
       `Olá ${input.clientName}! Abriu um horário em ${input.tenantName} no dia que você queria (${input.dateKey}). ` +
       `Corre para garantir: ${bookingUrl}`;
 
-    await this.createAndEnqueue({
-      tenantId: input.tenantId,
-      type: NotificationJobType.WAITLIST_SLOT_OPEN,
-      channel: NotificationChannel.WHATSAPP,
-      payload: {
-        phone: input.clientPhone,
-        message,
-        waLink: this.buildWaLink(input.clientPhone, message),
-      },
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { id: input.tenantId },
+      select: { plan: true },
     });
+    if (tenant && planAllowsWhatsappReminders(tenant.plan)) {
+      await this.createAndEnqueue({
+        tenantId: input.tenantId,
+        type: NotificationJobType.WAITLIST_SLOT_OPEN,
+        channel: NotificationChannel.WHATSAPP,
+        payload: {
+          phone: input.clientPhone,
+          message,
+          waLink: this.buildWaLink(input.clientPhone, message),
+        },
+      });
+    }
 
     if (input.clientEmail) {
       await this.createAndEnqueue({

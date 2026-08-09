@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { FormEvent, Suspense, useState } from 'react';
-import { BrandLogo } from '@/components/BrandLogo';
+import { AuthShell } from '@/components/AuthShell';
 import { Alert, Button, Field, Input, Spinner } from '@/components/ui';
 import { api, ApiError } from '@/lib/api';
 
@@ -65,7 +65,7 @@ function ResetPasswordForm() {
     return (
       <div className="space-y-4">
         <Alert tone="success">Senha redefinida com sucesso.</Alert>
-        <Link href="/login" className="text-sm font-semibold text-emerald-800 hover:underline">
+        <Link href="/login" className="text-sm font-semibold text-teal-800 hover:underline">
           Ir para o login
         </Link>
       </div>
@@ -108,19 +108,10 @@ function ResetPasswordForm() {
 
 export default function ResetPasswordPage() {
   return (
-    <div className="flex min-h-screen flex-col bg-atmosphere">
-      <div className="px-6 py-6 sm:px-10">
-        <BrandLogo />
-      </div>
-      <main className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center px-6 pb-16">
-        <h1 className="font-display text-3xl font-semibold text-stone-900">Redefinir senha</h1>
-        <p className="mt-2 text-stone-600">Escolha uma nova senha para acessar sua conta.</p>
-        <div className="mt-8">
-          <Suspense fallback={<Spinner />}>
-            <ResetPasswordForm />
-          </Suspense>
-        </div>
-      </main>
-    </div>
+    <AuthShell title="Redefinir senha" description="Escolha uma nova senha para acessar sua conta.">
+      <Suspense fallback={<Spinner />}>
+        <ResetPasswordForm />
+      </Suspense>
+    </AuthShell>
   );
 }

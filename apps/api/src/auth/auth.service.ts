@@ -104,15 +104,29 @@ export class AuthService {
 
   async login(dto: LoginDto) {
     const email = dto.email.toLowerCase().trim();
-    const user = await this.prisma.user.findFirst({
-      where: { email, deletedAt: null, isActive: true },
+    const candidates = await this.prisma.user.findMany({
+      where: {
+        email,
+        deletedAt: null,
+        isActive: true,
+        ...(dto.tenantSlug
+          ? { tenant: { slug: dto.tenantSlug, deletedAt: null } }
+          : { tenant: { deletedAt: null } }),
+      },
       include: { tenant: true },
+      take: 5,
     });
 
-    if (!user || user.tenant.deletedAt) {
+    if (candidates.length === 0) {
       throw new UnauthorizedException('Credenciais inválidas');
     }
+    if (candidates.length > 1 && !dto.tenantSlug) {
+      throw new UnauthorizedException(
+        'Há mais de um negócio com este e-mail. Informe o slug (ex.: studio-maria) para entrar.',
+      );
+    }
 
+    const user = candidates[0];
     const ok = await bcrypt.compare(dto.password, user.passwordHash);
     if (!ok) {
       throw new UnauthorizedException('Credenciais inválidas');
@@ -137,30 +151,71 @@ export class AuthService {
 
   async refresh(rawRefreshToken: string) {
     const tokenHash = hashToken(rawRefreshToken);
-    const stored = await this.prisma.refreshToken.findUnique({
-      where: { tokenHash },
-      include: { user: { include: { tenant: true } } },
+
+    // Rotação atômica (M-01): revoke-if-active + novo refresh na mesma TX.
+    // Reuse de token já revogado invalida toda a família do usuário.
+    const rotated = await this.prisma.$transaction(async (tx) => {
+      const stored = await tx.refreshToken.findUnique({
+        where: { tokenHash },
+        include: { user: { include: { tenant: true } } },
+      });
+
+      if (
+        !stored ||
+        stored.expiresAt < new Date() ||
+        !stored.user.isActive ||
+        stored.user.deletedAt ||
+        stored.user.tenant.deletedAt
+      ) {
+        throw new UnauthorizedException('Refresh token inválido');
+      }
+
+      if (stored.revokedAt) {
+        // Detecção de reuse: alguém reapresentou um refresh já rotacionado
+        await tx.refreshToken.updateMany({
+          where: { userId: stored.userId, revokedAt: null },
+          data: { revokedAt: new Date() },
+        });
+        throw new UnauthorizedException('Refresh token inválido');
+      }
+
+      const revoked = await tx.refreshToken.updateMany({
+        where: { id: stored.id, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+      if (revoked.count === 0) {
+        await tx.refreshToken.updateMany({
+          where: { userId: stored.userId, revokedAt: null },
+          data: { revokedAt: new Date() },
+        });
+        throw new UnauthorizedException('Refresh token inválido');
+      }
+
+      const refreshToken = generateRefreshToken();
+      const expiresAt = new Date(Date.now() + ttlToMs(this.env.jwtRefreshTtl));
+      await tx.refreshToken.create({
+        data: {
+          userId: stored.userId,
+          tokenHash: hashToken(refreshToken),
+          expiresAt,
+        },
+      });
+
+      return { stored, refreshToken };
     });
 
-    if (
-      !stored ||
-      stored.revokedAt ||
-      stored.expiresAt < new Date() ||
-      !stored.user.isActive ||
-      stored.user.deletedAt ||
-      stored.user.tenant.deletedAt
-    ) {
-      throw new UnauthorizedException('Refresh token inválido');
-    }
+    const { user } = rotated.stored;
+    const accessToken = await this.jwt.signAsync(
+      { sub: user.id, tenantId: user.tenantId, email: user.email, role: user.role },
+      {
+        secret: this.env.jwtAccessSecret,
+        expiresIn: this.env.jwtAccessTtl as `${number}${'s' | 'm' | 'h' | 'd'}`,
+      },
+    );
 
-    // Rotação: revoga o antigo e emite novo par
-    await this.prisma.refreshToken.update({
-      where: { id: stored.id },
-      data: { revokedAt: new Date() },
-    });
-
-    const { user } = stored;
-    return this.issueTokens(user.id, user.tenantId, user.email, user.role, {
+    return {
+      accessToken,
+      refreshToken: rotated.refreshToken,
       user: {
         id: user.id,
         name: user.name,
@@ -174,7 +229,7 @@ export class AuthService {
         timezone: user.tenant.timezone,
         plan: user.tenant.plan,
       },
-    });
+    };
   }
 
   async logout(rawRefreshToken: string) {
@@ -188,22 +243,40 @@ export class AuthService {
 
   /**
    * Sempre responde ok (mesmo para e-mail inexistente) — evita enumeração de contas.
-   * Token de uso único com validade de 1h, armazenado como hash.
+   * Com e-mail em múltiplos tenants, exige tenantSlug; senão não dispara e-mail.
+   * Tokens anteriores do usuário são invalidados ao emitir um novo.
    */
-  async forgotPassword(email: string) {
-    const user = await this.prisma.user.findFirst({
-      where: { email: email.toLowerCase().trim(), deletedAt: null, isActive: true },
+  async forgotPassword(email: string, tenantSlug?: string) {
+    const normalized = email.toLowerCase().trim();
+    const matches = await this.prisma.user.findMany({
+      where: {
+        email: normalized,
+        deletedAt: null,
+        isActive: true,
+        ...(tenantSlug
+          ? { tenant: { slug: tenantSlug, deletedAt: null } }
+          : { tenant: { deletedAt: null } }),
+      },
+      take: 5,
     });
+
+    const user = matches.length === 1 ? matches[0] : null;
 
     if (user) {
       const rawToken = generateRefreshToken();
-      await this.prisma.passwordResetToken.create({
-        data: {
-          userId: user.id,
-          tokenHash: hashToken(rawToken),
-          expiresAt: new Date(Date.now() + 3_600_000),
-        },
-      });
+      await this.prisma.$transaction([
+        this.prisma.passwordResetToken.updateMany({
+          where: { userId: user.id, usedAt: null },
+          data: { usedAt: new Date() },
+        }),
+        this.prisma.passwordResetToken.create({
+          data: {
+            userId: user.id,
+            tokenHash: hashToken(rawToken),
+            expiresAt: new Date(Date.now() + 3_600_000),
+          },
+        }),
+      ]);
 
       const resetUrl = `${this.env.appPublicUrl}/redefinir-senha?token=${rawToken}`;
       await this.notifications.enqueuePasswordReset(user.tenantId, user.email, user.name, resetUrl);

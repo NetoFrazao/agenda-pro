@@ -1,4 +1,4 @@
-import { getMinuteOfDay, getZonedParts } from './timezone';
+import { getMinuteOfDay, getZonedParts, dateOnlyToDateKey } from './timezone';
 
 describe('timezone helpers', () => {
   it('extrai partes civis em America/Sao_Paulo', () => {
@@ -16,5 +16,9 @@ describe('timezone helpers', () => {
   it('calcula minuto do dia no fuso local', () => {
     const date = new Date('2024-01-15T15:30:00.000Z'); // 12:30 BRT
     expect(getMinuteOfDay(date, 'America/Sao_Paulo')).toBe(12 * 60 + 30);
+  });
+
+  it('dateOnlyToDateKey preserva civil de @db.Date', () => {
+    expect(dateOnlyToDateKey(new Date('2024-12-31T00:00:00.000Z'))).toBe('2024-12-31');
   });
 });

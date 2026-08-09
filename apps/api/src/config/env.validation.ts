@@ -27,6 +27,11 @@ const envSchema = z.object({
   STRIPE_PRICE_STARTER: z.string().optional().default(''),
   STRIPE_PRICE_PRO: z.string().optional().default(''),
   STRIPE_PRICE_BUSINESS: z.string().optional().default(''),
+  /// Só em não-produção: permite upgrade PRO/BUSINESS sem Stripe (local_demo). Ignorado em production.
+  ALLOW_BILLING_DEMO: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((v) => v === 'true'),
   SMTP_HOST: z.string().optional().default(''),
   SMTP_PORT: z.coerce.number().int().positive().default(587),
   SMTP_USER: z.string().optional().default(''),
@@ -40,6 +45,8 @@ const envSchema = z.object({
   EVOLUTION_INSTANCE: z.string().optional().default(''),
   /// PIX via Mercado Pago. Vazio = sinal vira "pagar no local"
   MERCADOPAGO_ACCESS_TOKEN: z.string().optional().default(''),
+  /// Segredo do webhook MP (x-signature). Em prod, obrigatório se MP estiver ativo.
+  MERCADOPAGO_WEBHOOK_SECRET: z.string().optional().default(''),
 });
 
 export type EnvVars = z.infer<typeof envSchema>;

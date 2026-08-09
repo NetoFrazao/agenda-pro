@@ -4,6 +4,7 @@ type BrandLogoProps = {
   href?: string;
   size?: 'sm' | 'lg' | 'hero';
   className?: string;
+  tone?: 'light' | 'dark';
 };
 
 const sizeClass = {
@@ -12,18 +13,25 @@ const sizeClass = {
   hero: 'text-5xl sm:text-6xl md:text-7xl',
 };
 
-export function BrandLogo({ href = '/', size = 'sm', className = '' }: BrandLogoProps) {
+export function BrandLogo({
+  href = '/',
+  size = 'sm',
+  className = '',
+  tone = 'light',
+}: BrandLogoProps) {
+  const base = tone === 'dark' ? 'text-white' : 'text-ink';
+  const accent = tone === 'dark' ? 'text-mint' : 'text-mint-deep';
   const content = (
     <span
-      className={`font-display font-semibold tracking-tight text-stone-900 ${sizeClass[size]} ${className}`}
+      className={`font-display font-bold tracking-tight ${base} ${sizeClass[size]} ${className}`}
     >
-      Agenda <span className="text-emerald-700">Pro</span>
+      Agenda<span className={accent}>Pro</span>
     </span>
   );
 
   if (!href) return content;
   return (
-    <Link href={href} className="inline-block no-underline hover:opacity-90">
+    <Link href={href} className="inline-block no-underline transition hover:opacity-90">
       {content}
     </Link>
   );

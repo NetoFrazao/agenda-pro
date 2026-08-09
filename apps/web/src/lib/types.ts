@@ -104,6 +104,20 @@ export interface Appointment {
   durationMinutesSnapshot?: number;
 }
 
+/** Resposta de PATCH /api/appointments/:id/status (retenção pós-COMPLETED). */
+export interface AppointmentStatusUpdateResult extends Appointment {
+  rebookingSuggested?: boolean;
+  rebooking?: {
+    clientId: string;
+    serviceId: string;
+    serviceName: string;
+    suggestedAfterDays: number;
+    message: string;
+  } | null;
+}
+
+export type InactiveBucket = 30 | 60 | 90;
+
 export interface PlanDefinition {
   code: PlanCode;
   name: string;
@@ -184,7 +198,6 @@ export interface ManagedAppointment {
   startsAt: string;
   endsAt: string;
   status: AppointmentStatus;
-  manageToken: string;
   priceCentsSnapshot: number;
   durationMinutesSnapshot: number;
   client: { name: string; phone: string; email?: string | null };
@@ -235,19 +248,30 @@ export interface ReportsSummary {
   }[];
 }
 
+export type ClientSegment = 'new' | 'frequent' | 'vip' | 'inactive' | 'at_risk';
+
 export interface ClientListItem {
   id: string;
   name: string;
   phone: string;
   email?: string | null;
   notes?: string | null;
+  tags?: string[];
+  birthday?: string | null;
+  marketingOptIn?: boolean;
   loyaltyPoints: number;
   createdAt: string;
   appointmentsCount: number;
   completedCount: number;
+  cancelledCount?: number;
   totalSpentCents: number;
+  avgTicketCents?: number;
+  visitsPerMonth?: number;
   lastVisit?: string | null;
+  nextAppointmentAt?: string | null;
   noShowCount: number;
+  segment?: ClientSegment;
+  inactiveBucket?: InactiveBucket | null;
 }
 
 export interface ClientListResponse {
@@ -255,6 +279,12 @@ export interface ClientListResponse {
   page: number;
   pageSize: number;
   items: ClientListItem[];
+}
+
+export interface ClientProfileUpdate {
+  tags?: string[];
+  birthday?: string | null;
+  notes?: string | null;
 }
 
 export interface ClientAppointment {
@@ -272,9 +302,27 @@ export interface ClientDetail {
   phone: string;
   email?: string | null;
   notes?: string | null;
+  tags?: string[];
+  birthday?: string | null;
+  marketingOptIn?: boolean;
   loyaltyPoints: number;
   createdAt: string;
   appointments: ClientAppointment[];
+  segment?: ClientSegment;
+  inactiveBucket?: InactiveBucket | null;
+  suggestRebooking?: boolean;
+  rebooking?: { suggestedAfterDays: number; message: string } | null;
+  metrics?: {
+    completedCount: number;
+    cancelledCount: number;
+    noShowCount: number;
+    totalSpentCents: number;
+    avgTicketCents: number;
+    visitsPerMonth: number;
+    lastVisit?: string | null;
+    nextAppointmentAt?: string | null;
+    firstVisit?: string | null;
+  };
 }
 
 export interface TeamMember {

@@ -17,10 +17,11 @@ export class AvailabilityService {
     if (dto.endMinute <= dto.startMinute) {
       throw new BadRequestException('endMinute deve ser maior que startMinute');
     }
+    const professionalId = await this.resolveProfessionalId(tenantId, dto.professionalId, userId);
     return this.prisma.availabilityRule.create({
       data: {
         tenantId,
-        professionalId: dto.professionalId ?? userId,
+        professionalId,
         dayOfWeek: dto.dayOfWeek,
         startMinute: dto.startMinute,
         endMinute: dto.endMinute,
@@ -72,7 +73,9 @@ export class AvailabilityService {
     return this.prisma.availabilityException.create({
       data: {
         tenantId,
-        professionalId: dto.professionalId,
+        professionalId: dto.professionalId
+          ? await this.resolveProfessionalId(tenantId, dto.professionalId)
+          : null,
         date: new Date(dto.date),
         isAvailable,
         startMinute: isAvailable ? dto.startMinute : null,
@@ -91,5 +94,25 @@ export class AvailabilityService {
     }
     await this.prisma.availabilityException.delete({ where: { id } });
     return { ok: true };
+  }
+
+  /** Garante que professionalId pertence ao tenant (evita cross-tenant write). */
+  private async resolveProfessionalId(
+    tenantId: string,
+    professionalId?: string | null,
+    fallbackUserId?: string,
+  ): Promise<string> {
+    const id = professionalId ?? fallbackUserId;
+    if (!id) {
+      throw new BadRequestException('professionalId é obrigatório');
+    }
+    const user = await this.prisma.user.findFirst({
+      where: { id, tenantId, deletedAt: null, isActive: true },
+      select: { id: true },
+    });
+    if (!user) {
+      throw new BadRequestException('Profissional não pertence a este negócio');
+    }
+    return user.id;
   }
 }

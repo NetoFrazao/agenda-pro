@@ -1,10 +1,27 @@
 import { Body, Controller, Get, Param, Patch, Query, UseGuards } from '@nestjs/common';
-import { ApiBearerAuth, ApiPropertyOptional, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiProperty, ApiPropertyOptional, ApiTags } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsInt, IsOptional, IsString, MaxLength, Min } from 'class-validator';
+import {
+  ArrayMaxSize,
+  IsArray,
+  IsBoolean,
+  IsDateString,
+  IsIn,
+  IsInt,
+  IsOptional,
+  IsString,
+  Max,
+  MaxLength,
+  Min,
+  ValidateIf,
+} from 'class-validator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AuthUser, CurrentUser } from '../common/decorators/current-user.decorator';
+import type { ClientSegment, InactiveBucket } from './client-segment';
 import { ClientsService } from './clients.service';
+
+const SEGMENTS = ['new', 'frequent', 'vip', 'inactive', 'at_risk'] as const;
+const INACTIVE_DAYS = [30, 60, 90] as const;
 
 class ListClientsQueryDto {
   @ApiPropertyOptional()
@@ -19,12 +36,31 @@ class ListClientsQueryDto {
   @Min(1)
   page?: number;
 
-  @ApiPropertyOptional({ default: 20 })
+  @ApiPropertyOptional({ default: 20, maximum: 100 })
   @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)
+  @Max(100)
   pageSize?: number;
+
+  @ApiPropertyOptional({
+    enum: SEGMENTS,
+    description:
+      'Filtro de segmento resolvido no tenant (groupBy COMPLETED) antes da paginação — total/páginas corretos',
+  })
+  @IsOptional()
+  @IsIn(SEGMENTS)
+  segment?: ClientSegment;
+
+  @ApiPropertyOptional({
+    enum: INACTIVE_DAYS,
+    description: 'Clientes inativos há pelo menos N dias (campanhas; respeitar marketingOptIn)',
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsIn(INACTIVE_DAYS)
+  inactiveDays?: InactiveBucket;
 }
 
 class UpdateClientNotesDto {
@@ -33,6 +69,34 @@ class UpdateClientNotesDto {
   @IsString()
   @MaxLength(2000)
   notes?: string;
+}
+
+class UpdateClientConsentDto {
+  @ApiProperty({ description: 'Consentimento marketing/lembretes (LGPD)' })
+  @IsBoolean()
+  marketingOptIn!: boolean;
+}
+
+class UpdateClientProfileDto {
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(20)
+  @IsString({ each: true })
+  @MaxLength(40, { each: true })
+  tags?: string[];
+
+  @ApiPropertyOptional({ description: 'YYYY-MM-DD; omitir ou string vazia para limpar' })
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== '')
+  @IsDateString()
+  birthday?: string | null;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  notes?: string | null;
 }
 
 @ApiTags('clients')
@@ -44,7 +108,10 @@ export class ClientsController {
 
   @Get()
   list(@CurrentUser() user: AuthUser, @Query() query: ListClientsQueryDto) {
-    return this.clients.list(user.tenantId, query.search, query.page, query.pageSize);
+    return this.clients.list(user.tenantId, query.search, query.page, query.pageSize, {
+      segment: query.segment,
+      inactiveDays: query.inactiveDays,
+    });
   }
 
   @Get(':id')
@@ -59,5 +126,32 @@ export class ClientsController {
     @Body() dto: UpdateClientNotesDto,
   ) {
     return this.clients.updateNotes(user.tenantId, id, dto.notes ?? null);
+  }
+
+  @Patch(':id/consent')
+  updateConsent(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() dto: UpdateClientConsentDto,
+  ) {
+    return this.clients.updateMarketingConsent(user.tenantId, id, dto.marketingOptIn);
+  }
+
+  @Patch(':id/profile')
+  updateProfile(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() dto: UpdateClientProfileDto,
+  ) {
+    return this.clients.updateProfile(user.tenantId, id, {
+      tags: dto.tags,
+      birthday:
+        dto.birthday === undefined
+          ? undefined
+          : dto.birthday === null || dto.birthday === ''
+            ? null
+            : new Date(dto.birthday),
+      notes: dto.notes,
+    });
   }
 }

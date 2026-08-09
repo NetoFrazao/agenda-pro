@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Injectable,
+  Logger,
   NotFoundException,
   ServiceUnavailableException,
 } from '@nestjs/common';
@@ -8,6 +9,8 @@ import { PlanCode, SubscriptionStatus } from '@prisma/client';
 import Stripe from 'stripe';
 import { EnvService } from '../config/env.service';
 import { PrismaService } from '../prisma/prisma.service';
+
+import { planAllowsPixDeposit, planAllowsWhatsappReminders } from './plan-entitlements';
 
 const PLAN_META: Record<
   PlanCode,
@@ -38,8 +41,36 @@ const PLAN_META: Record<
   },
 };
 
+function mapStripeSubscriptionStatus(status: Stripe.Subscription.Status): SubscriptionStatus {
+  switch (status) {
+    case 'trialing':
+      return SubscriptionStatus.TRIALING;
+    case 'active':
+      return SubscriptionStatus.ACTIVE;
+    case 'past_due':
+    case 'unpaid':
+      return SubscriptionStatus.PAST_DUE;
+    case 'canceled':
+    case 'incomplete_expired':
+      return SubscriptionStatus.CANCELED;
+    case 'incomplete':
+    case 'paused':
+    default:
+      return SubscriptionStatus.INCOMPLETE;
+  }
+}
+
+/**
+ * Gaps Stripe reais (documentados — não fingir produto completo):
+ * - Sem Customer Portal / self-serve payment method update
+ * - Sem trial_period_days no Checkout (trial só se configurado no Price no Stripe)
+ * - Sem e-mails de dunning / grace custom além de status PAST_DUE via webhook
+ * - Sem proration UI; cancel é cancel_at_period_end (exceto exclusão LGPD = imediato)
+ * - Sem sync de invoice.paid → recibo no app
+ */
 @Injectable()
 export class BillingService {
+  private readonly logger = new Logger(BillingService.name);
   private stripe: Stripe | null = null;
 
   constructor(
@@ -59,8 +90,8 @@ export class BillingService {
       priceCents: prices[code],
       priceCentsMonthly: prices[code],
       currency: 'BRL',
-      whatsappReminders: code !== PlanCode.STARTER,
-      pixDepositEnabled: code === PlanCode.BUSINESS || code === PlanCode.PRO,
+      whatsappReminders: planAllowsWhatsappReminders(code),
+      pixDepositEnabled: planAllowsPixDeposit(code),
       priceSource: 'env',
     }));
   }
@@ -93,13 +124,17 @@ export class BillingService {
     }
 
     if (!this.stripe) {
-      // Sem Stripe configurado: ativa o plano localmente (dev / demo portfólio)
+      if (this.env.nodeEnv === 'production' || !this.env.allowBillingDemo) {
+        throw new ServiceUnavailableException(
+          'Pagamento de planos indisponível: Stripe não configurado. Defina STRIPE_SECRET_KEY (e price IDs) ou, apenas em não-produção, ALLOW_BILLING_DEMO=true.',
+        );
+      }
       await this.activatePlanLocally(tenantId, plan);
       return {
         mode: 'local_demo' as const,
         url: `${this.env.appPublicUrl}/dashboard/billing?ok=demo&plan=${plan}`,
         message:
-          'Stripe não configurado — plano ativado em modo demo. Defina STRIPE_SECRET_KEY em produção.',
+          'Stripe não configurado — plano ativado em modo demo (ALLOW_BILLING_DEMO). Não use em produção.',
       };
     }
 
@@ -163,6 +198,45 @@ export class BillingService {
     return { ok: true, cancelAtPeriodEnd: true };
   }
 
+  /**
+   * Cancelamento imediato no Stripe (exclusão de conta LGPD).
+   * Fail-soft: se Stripe falhar, ainda assim marcamos CANCELED localmente e logamos.
+   */
+  async cancelImmediatelyForAccountDeletion(tenantId: string): Promise<void> {
+    const sub = await this.prisma.subscription.findUnique({ where: { tenantId } });
+    if (!sub) return;
+
+    if (this.stripe && sub.stripeSubscriptionId) {
+      try {
+        await this.stripe.subscriptions.cancel(sub.stripeSubscriptionId);
+        this.logger.log(
+          JSON.stringify({
+            event: 'billing.stripe.cancel_immediate',
+            tenantId,
+            stripeSubscriptionId: sub.stripeSubscriptionId,
+          }),
+        );
+      } catch (err) {
+        this.logger.error(
+          `Falha ao cancelar Stripe na exclusão LGPD tenant=${tenantId}: ${(err as Error).message}`,
+        );
+      }
+    }
+
+    await this.prisma.subscription.update({
+      where: { tenantId },
+      data: {
+        status: SubscriptionStatus.CANCELED,
+        plan: PlanCode.STARTER,
+        cancelAtPeriodEnd: false,
+      },
+    });
+    await this.prisma.tenant.update({
+      where: { id: tenantId },
+      data: { plan: PlanCode.STARTER },
+    });
+  }
+
   async handleStripeWebhook(rawBody: Buffer, signature: string) {
     if (!this.stripe || !this.env.stripeWebhookSecret) {
       throw new ServiceUnavailableException('Webhook Stripe não configurado');
@@ -174,12 +248,48 @@ export class BillingService {
       this.env.stripeWebhookSecret,
     );
 
+    this.logger.log(JSON.stringify({ event: 'billing.stripe.webhook', type: event.type }));
+
     if (event.type === 'checkout.session.completed') {
       const session = event.data.object as Stripe.Checkout.Session;
       const tenantId = session.metadata?.tenantId;
       const plan = session.metadata?.plan as PlanCode | undefined;
       if (tenantId && plan) {
         await this.activatePlanLocally(tenantId, plan, session.subscription as string | undefined);
+      }
+    }
+
+    if (event.type === 'customer.subscription.updated') {
+      const subscription = event.data.object as Stripe.Subscription;
+      const status = mapStripeSubscriptionStatus(subscription.status);
+      const subAny = subscription as unknown as {
+        current_period_start?: number;
+        current_period_end?: number;
+        cancel_at_period_end: boolean;
+      };
+      const periodStart = subAny.current_period_start
+        ? new Date(subAny.current_period_start * 1000)
+        : undefined;
+      const periodEnd = subAny.current_period_end
+        ? new Date(subAny.current_period_end * 1000)
+        : undefined;
+
+      await this.prisma.subscription.updateMany({
+        where: { stripeSubscriptionId: subscription.id },
+        data: {
+          status,
+          cancelAtPeriodEnd: subscription.cancel_at_period_end,
+          ...(periodStart ? { currentPeriodStart: periodStart } : {}),
+          ...(periodEnd ? { currentPeriodEnd: periodEnd } : {}),
+          ...(status === SubscriptionStatus.CANCELED ? { plan: PlanCode.STARTER } : {}),
+        },
+      });
+
+      if (status === SubscriptionStatus.CANCELED) {
+        await this.prisma.tenant.updateMany({
+          where: { subscription: { stripeSubscriptionId: subscription.id } },
+          data: { plan: PlanCode.STARTER },
+        });
       }
     }
 
@@ -193,6 +303,34 @@ export class BillingService {
           cancelAtPeriodEnd: false,
         },
       });
+      await this.prisma.tenant.updateMany({
+        where: { subscription: { stripeSubscriptionId: subscription.id } },
+        data: { plan: PlanCode.STARTER },
+      });
+    }
+
+    if (event.type === 'invoice.payment_failed') {
+      const invoice = event.data.object as Stripe.Invoice;
+      const rawSub = (invoice as unknown as { subscription?: string | { id: string } | null })
+        .subscription;
+      const stripeSubId =
+        typeof rawSub === 'string'
+          ? rawSub
+          : rawSub && typeof rawSub === 'object'
+            ? rawSub.id
+            : null;
+      if (stripeSubId) {
+        await this.prisma.subscription.updateMany({
+          where: { stripeSubscriptionId: stripeSubId },
+          data: { status: SubscriptionStatus.PAST_DUE },
+        });
+        this.logger.warn(
+          JSON.stringify({
+            event: 'billing.payment_failed',
+            stripeSubscriptionId: stripeSubId,
+          }),
+        );
+      }
     }
 
     return { received: true };

@@ -21,6 +21,7 @@ type FormState = {
   description: string;
   durationMinutes: string;
   priceReais: string;
+  depositReais: string;
 };
 
 const emptyForm: FormState = {
@@ -28,6 +29,7 @@ const emptyForm: FormState = {
   description: '',
   durationMinutes: '30',
   priceReais: '50',
+  depositReais: '0',
 };
 
 export default function ServicesPage() {
@@ -60,6 +62,7 @@ export default function ServicesPage() {
       description: service.description || '',
       durationMinutes: String(service.durationMinutes),
       priceReais: (service.priceCents / 100).toFixed(2).replace('.', ','),
+      depositReais: ((service.depositCents ?? 0) / 100).toFixed(2).replace('.', ','),
     });
     setSuccess(null);
   }
@@ -77,11 +80,14 @@ export default function ServicesPage() {
     try {
       const priceNormalized = form.priceReais.replace(/\./g, '').replace(',', '.');
       const priceCents = Math.round(parseFloat(priceNormalized) * 100);
+      const depositNormalized = form.depositReais.replace(/\./g, '').replace(',', '.');
+      const depositCents = Math.round(parseFloat(depositNormalized || '0') * 100);
       const payload = {
         name: form.name.trim(),
         description: form.description.trim() || undefined,
         durationMinutes: Number(form.durationMinutes),
         priceCents,
+        depositCents: Number.isFinite(depositCents) ? Math.max(0, depositCents) : 0,
       };
 
       if (editingId) {
@@ -130,7 +136,7 @@ export default function ServicesPage() {
     <div>
       <PageTitle
         title="Serviços"
-        description="Defina o que você oferece, duração e preço em reais."
+        description="Defina o que você oferece, duração, preço e sinal (opcional)."
       />
       {error ? (
         <div className="mb-4">
@@ -165,7 +171,7 @@ export default function ServicesPage() {
             onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
           />
         </Field>
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid gap-4 sm:grid-cols-3">
           <Field label="Duração (minutos)" id="svc-duration">
             <Select
               id="svc-duration"
@@ -186,6 +192,18 @@ export default function ServicesPage() {
               inputMode="decimal"
               value={form.priceReais}
               onChange={(e) => setForm((f) => ({ ...f, priceReais: e.target.value }))}
+            />
+          </Field>
+          <Field
+            label="Sinal (R$)"
+            id="svc-deposit"
+            hint="0 = sem sinal. PIX online exige plano Pro/Business."
+          >
+            <Input
+              id="svc-deposit"
+              inputMode="decimal"
+              value={form.depositReais}
+              onChange={(e) => setForm((f) => ({ ...f, depositReais: e.target.value }))}
             />
           </Field>
         </div>
@@ -219,6 +237,7 @@ export default function ServicesPage() {
                 </p>
                 <p className="text-sm text-stone-600">
                   {s.durationMinutes} min · {formatBRL(s.priceCents)}
+                  {(s.depositCents ?? 0) > 0 ? ` · sinal ${formatBRL(s.depositCents ?? 0)}` : ''}
                 </p>
                 {s.description ? (
                   <p className="mt-1 text-sm text-stone-500">{s.description}</p>

@@ -1,7 +1,9 @@
 import {
   ACTIVE_APPOINTMENT_STATUSES,
   computeDaySlots,
+  dateOnlyToDateKey,
   hasOverlap,
+  startOfMonthInTimeZone,
   toDateKey,
   zonedCivilToUtc,
 } from './availability.engine';
@@ -10,10 +12,28 @@ describe('availability.engine', () => {
   const timeZone = 'America/Sao_Paulo';
 
   it('toDateKey respeita o fuso', () => {
-    // 2024-06-10 02:00 UTC = ainda 09/06 à noite em SP?
     // 2024-06-10 03:00 UTC = 00:00 em SP (UTC-3)
     const d = new Date('2024-06-10T03:00:00.000Z');
     expect(toDateKey(d, timeZone)).toBe('2024-06-10');
+  });
+
+  it('dateOnlyToDateKey não desloca @db.Date em fuso negativo', () => {
+    // Prisma devolve DATE como meia-noite UTC — toDateKey(tz) quebraria para 09/06
+    const dbDate = new Date('2024-06-10T00:00:00.000Z');
+    expect(dateOnlyToDateKey(dbDate)).toBe('2024-06-10');
+    expect(toDateKey(dbDate, timeZone)).toBe('2024-06-09');
+  });
+
+  it('startOfMonthInTimeZone usa meia-noite civil do tenant (M-04)', () => {
+    // 2024-08-01 02:00 UTC ainda é 31/07 em SP → mês civil = julho
+    const lateUtc = new Date('2024-08-01T02:00:00.000Z');
+    const julyStart = startOfMonthInTimeZone(lateUtc, timeZone);
+    expect(toDateKey(julyStart, timeZone)).toBe('2024-07-01');
+    expect(julyStart.toISOString()).toBe(zonedCivilToUtc('2024-07-01', 0, timeZone).toISOString());
+
+    // Já em 01/08 local
+    const augLocal = new Date('2024-08-01T03:00:00.000Z');
+    expect(toDateKey(startOfMonthInTimeZone(augLocal, timeZone), timeZone)).toBe('2024-08-01');
   });
 
   it('gera slots dentro da janela e pula ocupados', () => {
@@ -46,6 +66,28 @@ describe('availability.engine', () => {
       rules: [{ dayOfWeek: 1, startMinute: 9 * 60, endMinute: 12 * 60, isActive: true }],
       exceptions: [
         { dateKey: '2024-06-10', isAvailable: false, startMinute: null, endMinute: null },
+      ],
+      busy: [],
+      now: new Date('2024-06-01T12:00:00.000Z'),
+    });
+    expect(slots).toHaveLength(0);
+  });
+
+  it('exceção via dateOnlyToDateKey casa com dateKey do slot (virada UTC)', () => {
+    const dateKey = '2024-06-10';
+    const dbDate = new Date(`${dateKey}T00:00:00.000Z`);
+    const slots = computeDaySlots({
+      dateKey,
+      timeZone,
+      durationMinutes: 30,
+      rules: [{ dayOfWeek: 1, startMinute: 9 * 60, endMinute: 12 * 60, isActive: true }],
+      exceptions: [
+        {
+          dateKey: dateOnlyToDateKey(dbDate),
+          isAvailable: false,
+          startMinute: null,
+          endMinute: null,
+        },
       ],
       busy: [],
       now: new Date('2024-06-01T12:00:00.000Z'),
@@ -105,9 +147,7 @@ describe('availability.engine', () => {
     });
 
     const times = slots.map((s) => s.toISOString());
-    // 09:30–10:00 encostaria no ocupado (10:00) sem respeitar os 15min de folga
     expect(times).not.toContain(zonedCivilToUtc(dateKey, 9 * 60 + 30, timeZone).toISOString());
-    // 10:30–11:00 idem na saída
     expect(times).not.toContain(zonedCivilToUtc(dateKey, 10 * 60 + 30, timeZone).toISOString());
     expect(times).toContain(zonedCivilToUtc(dateKey, 9 * 60, timeZone).toISOString());
     expect(times).toContain(zonedCivilToUtc(dateKey, 11 * 60, timeZone).toISOString());
@@ -127,7 +167,6 @@ describe('availability.engine', () => {
       now: zonedCivilToUtc(dateKey, 9 * 60, timeZone),
     });
     const times = slots.map((s) => s.toISOString());
-    // agora = 09:00, antecedência 60min → 09:30 fora, 10:00 e 10:30 ok
     expect(times).not.toContain(zonedCivilToUtc(dateKey, 9 * 60 + 30, timeZone).toISOString());
     expect(times).toContain(zonedCivilToUtc(dateKey, 10 * 60, timeZone).toISOString());
   });
@@ -135,7 +174,6 @@ describe('availability.engine', () => {
   it('hasOverlap com buffer detecta conflito encostado', () => {
     const aStart = new Date('2024-01-01T13:00:00.000Z');
     const aEnd = new Date('2024-01-01T13:30:00.000Z');
-    // Ocupado logo em seguida (13:30–14:00): sem buffer ok, com buffer conflita
     const busy = [
       {
         startsAt: new Date('2024-01-01T13:30:00.000Z'),

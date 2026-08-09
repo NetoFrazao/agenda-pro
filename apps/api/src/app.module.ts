@@ -9,6 +9,7 @@ import { AuthModule } from './auth/auth.module';
 import { AvailabilityModule } from './availability/availability.module';
 import { BillingModule } from './billing/billing.module';
 import { ClientsModule } from './clients/clients.module';
+import { CommonModule } from './common/common.module';
 import { EnvModule } from './config/env.module';
 import { validateEnv } from './config/env.validation';
 import { HealthModule } from './health/health.module';
@@ -43,6 +44,8 @@ import { WaitlistModule } from './waitlist/waitlist.module';
             'req.body.password',
             'req.body.email',
             'req.body.phone',
+            'req.body.manageToken',
+            'res.body.manageToken',
           ],
           remove: true,
         },
@@ -54,6 +57,7 @@ import { WaitlistModule } from './waitlist/waitlist.module';
         limit: 120,
       },
     ]),
+    CommonModule,
     EnvModule,
     PrismaModule,
     HealthModule,

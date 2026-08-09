@@ -4,18 +4,71 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { AppointmentStatus, Prisma, WaitlistStatus, type Tenant, type User } from '@prisma/client';
+import {
+  AppointmentStatus,
+  PixChargeStatus,
+  Prisma,
+  WaitlistStatus,
+  type Tenant,
+  type User,
+} from '@prisma/client';
 import {
   ACTIVE_APPOINTMENT_STATUSES,
   computeDaySlots,
+  dateOnlyToDateKey,
   hasOverlap,
+  startOfMonthInTimeZone,
   toDateKey,
 } from '../common/availability/availability.engine';
+import { PUBLIC_PROFILE_TTL_SECONDS, RedisCacheService } from '../common/cache/redis-cache.service';
+import {
+  DEFAULT_APPOINTMENTS_PAGE_SIZE,
+  normalizePage,
+  normalizePageSize,
+  type PageResult,
+} from '../common/pagination';
+import { notifyNextWaitlistCandidate } from '../common/waitlist/notify-next';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { MercadoPagoService } from '../payments/mercadopago.service';
 import { EnvService } from '../config/env.service';
 import { BookPublicDto, PublicReviewDto, RescheduleDto } from './dto/appointment.dto';
+import { planAllowsPixDeposit } from '../billing/plan-entitlements';
+import { assertValidTransition, isCancellableStatus } from './appointment-state';
+import { LoyaltyService } from '../loyalty/loyalty.service';
+
+function maskPhone(phone: string): string {
+  const digits = phone.replace(/\D/g, '');
+  if (digits.length < 4) return '****';
+  return `****${digits.slice(-4)}`;
+}
+
+function maskEmail(email: string | null | undefined): string | null {
+  if (!email) return null;
+  const [local, domain] = email.split('@');
+  if (!domain) return '***';
+  const visible = local.slice(0, Math.min(2, local.length));
+  return `${visible}***@${domain}`;
+}
+
+const APPOINTMENT_LIST_SELECT = {
+  id: true,
+  startsAt: true,
+  endsAt: true,
+  status: true,
+  priceCentsSnapshot: true,
+  durationMinutesSnapshot: true,
+  customerNotes: true,
+  createdAt: true,
+  client: { select: { id: true, name: true, phone: true, email: true } },
+  service: {
+    select: { id: true, name: true, durationMinutes: true, priceCents: true, depositCents: true },
+  },
+  professional: { select: { id: true, name: true } },
+  pixCharge: { select: { status: true, amountCents: true } },
+} satisfies Prisma.AppointmentSelect;
+
+type AppointmentListItem = Prisma.AppointmentGetPayload<{ select: typeof APPOINTMENT_LIST_SELECT }>;
 
 @Injectable()
 export class AppointmentsService {
@@ -24,68 +77,146 @@ export class AppointmentsService {
     private readonly notifications: NotificationsService,
     private readonly mercadoPago: MercadoPagoService,
     private readonly env: EnvService,
+    private readonly loyalty: LoyaltyService,
+    private readonly cache: RedisCacheService,
   ) {}
 
-  list(tenantId: string, from?: string, to?: string, professionalId?: string) {
+  /**
+   * Lista paginada (default pageSize=100, max=100).
+   * Breaking: resposta deixa de ser array cru → `{ items, total, page, pageSize }`.
+   */
+  async list(
+    tenantId: string,
+    opts: {
+      from?: string;
+      to?: string;
+      professionalId?: string;
+      page?: number;
+      pageSize?: number;
+    } = {},
+  ): Promise<PageResult<AppointmentListItem>> {
+    const page = normalizePage(opts.page);
+    const pageSize = normalizePageSize(opts.pageSize, DEFAULT_APPOINTMENTS_PAGE_SIZE);
     const where: Prisma.AppointmentWhereInput = { tenantId };
-    if (professionalId) where.professionalId = professionalId;
-    if (from || to) {
+    if (opts.professionalId) where.professionalId = opts.professionalId;
+    if (opts.from || opts.to) {
       where.startsAt = {};
-      if (from) where.startsAt.gte = new Date(from);
-      if (to) where.startsAt.lte = new Date(to);
+      if (opts.from) where.startsAt.gte = new Date(opts.from);
+      if (opts.to) where.startsAt.lte = new Date(opts.to);
     }
-    return this.prisma.appointment.findMany({
-      where,
-      include: {
-        client: true,
-        service: true,
-        professional: { select: { id: true, name: true } },
-        pixCharge: { select: { status: true, amountCents: true } },
-      },
-      orderBy: { startsAt: 'asc' },
-      take: 500,
-    });
+
+    const [items, total] = await Promise.all([
+      this.prisma.appointment.findMany({
+        where,
+        select: APPOINTMENT_LIST_SELECT,
+        orderBy: { startsAt: 'asc' },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      this.prisma.appointment.count({ where }),
+    ]);
+
+    return { items, total, page, pageSize };
   }
 
   async updateStatus(tenantId: string, id: string, status: AppointmentStatus) {
     const appt = await this.prisma.appointment.findFirst({
       where: { id, tenantId },
-      include: { tenant: true },
+      include: {
+        tenant: true,
+        service: { select: { id: true, name: true, durationMinutes: true } },
+      },
     });
     if (!appt) throw new NotFoundException('Agendamento não encontrado');
 
-    const updated = await this.prisma.appointment.update({
-      where: { id },
-      data: {
-        status,
-        cancelledAt: status === AppointmentStatus.CANCELLED ? new Date() : appt.cancelledAt,
-      },
-    });
+    assertValidTransition(appt.status, status);
 
-    // Fidelidade: pontos por atendimento concluído (1ª conclusão apenas)
-    if (
-      status === AppointmentStatus.COMPLETED &&
-      appt.status !== AppointmentStatus.COMPLETED &&
-      appt.tenant.loyaltyEnabled
-    ) {
-      const points = Math.floor(appt.priceCentsSnapshot / 100) * appt.tenant.loyaltyPointsPerReal;
-      if (points > 0) {
-        await this.prisma.client.update({
-          where: { id: appt.clientId },
-          data: { loyaltyPoints: { increment: points } },
-        });
+    const becameCompleted =
+      status === AppointmentStatus.COMPLETED && appt.status !== AppointmentStatus.COMPLETED;
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const row = await tx.appointment.update({
+        where: { id },
+        data: {
+          status,
+          cancelledAt: status === AppointmentStatus.CANCELLED ? new Date() : appt.cancelledAt,
+        },
+      });
+
+      // Fidelidade: ledger idempotente (unique appointmentId+CREDIT)
+      if (becameCompleted) {
+        await this.loyalty.creditForCompletedAppointment(
+          {
+            tenantId: appt.tenantId,
+            clientId: appt.clientId,
+            appointmentId: appt.id,
+            priceCents: appt.priceCentsSnapshot,
+            pointsPerReal: appt.tenant.loyaltyPointsPerReal,
+            loyaltyEnabled: appt.tenant.loyaltyEnabled,
+          },
+          tx,
+        );
       }
-    }
+
+      return row;
+    });
 
     if (status === AppointmentStatus.CANCELLED && appt.status !== AppointmentStatus.CANCELLED) {
       await this.notifications.enqueueBookingCancelled(id, 'professional');
-      await this.notifyWaitlist(appt.tenantId, appt.startsAt, appt.tenant);
+      await notifyNextWaitlistCandidate(
+        this.prisma,
+        this.notifications,
+        appt.tenantId,
+        appt.startsAt,
+        appt.tenant,
+      );
     }
 
-    return updated;
+    // Retenção: após COMPLETED, sugere remarcar (API; UI opcional)
+    if (becameCompleted) {
+      const hasUpcoming = await this.prisma.appointment.findFirst({
+        where: {
+          tenantId,
+          clientId: appt.clientId,
+          id: { not: appt.id },
+          status: { in: [...ACTIVE_APPOINTMENT_STATUSES] },
+          startsAt: { gt: new Date() },
+        },
+        select: { id: true },
+      });
+
+      return {
+        ...updated,
+        rebookingSuggested: !hasUpcoming,
+        rebooking: !hasUpcoming
+          ? {
+              clientId: appt.clientId,
+              serviceId: appt.serviceId,
+              serviceName: appt.service.name,
+              suggestedAfterDays: 30,
+              message: 'Sugestão: remarcar o próximo atendimento deste cliente.',
+            }
+          : null,
+      };
+    }
+
+    return { ...updated, rebookingSuggested: false, rebooking: null };
   }
 
   async getPublicProfile(slug: string) {
+    const cacheKey = this.cache.publicProfileKey(slug);
+    const cached =
+      await this.cache.getJson<Awaited<ReturnType<AppointmentsService['loadPublicProfile']>>>(
+        cacheKey,
+      );
+    if (cached) return cached;
+
+    const profile = await this.loadPublicProfile(slug);
+    await this.cache.setJson(cacheKey, profile, PUBLIC_PROFILE_TTL_SECONDS);
+    return profile;
+  }
+
+  private async loadPublicProfile(slug: string) {
     const tenant = await this.prisma.tenant.findFirst({
       where: { slug, deletedAt: null },
       select: {
@@ -142,6 +273,23 @@ export class AppointmentsService {
       },
       reviews: recentReviews,
     };
+  }
+
+  /** Invalida cache do perfil público (settings/services/team/reviews). */
+  async invalidatePublicProfileCache(tenantIdOrSlug: { tenantId?: string; slug?: string }) {
+    if (tenantIdOrSlug.slug) {
+      await this.cache.invalidatePublicProfile(tenantIdOrSlug.slug);
+      return;
+    }
+    if (tenantIdOrSlug.tenantId) {
+      await this.cache.invalidatePublicProfileByTenantId(tenantIdOrSlug.tenantId, async (id) => {
+        const t = await this.prisma.tenant.findUnique({
+          where: { id },
+          select: { slug: true },
+        });
+        return t?.slug ?? null;
+      });
+    }
   }
 
   async getPublicSlots(slug: string, serviceId: string, dateKey: string, professionalId?: string) {
@@ -245,7 +393,8 @@ export class AppointmentsService {
       minNoticeMinutes: tenant.minNoticeMinutes,
       rules,
       exceptions: exceptions.map((e) => ({
-        dateKey: toDateKey(e.date, tenant.timezone),
+        // @db.Date: extrair civil UTC, não via timezone do tenant
+        dateKey: dateOnlyToDateKey(e.date),
         isAvailable: e.isAvailable,
         startMinute: e.startMinute,
         endMinute: e.endMinute,
@@ -299,19 +448,20 @@ export class AppointmentsService {
       throw new ConflictException('Horário indisponível');
     }
 
-    const useOnlineDeposit = service.depositCents > 0 && this.mercadoPago.isConfigured;
+    const useOnlineDeposit =
+      service.depositCents > 0 &&
+      this.mercadoPago.isConfigured &&
+      planAllowsPixDeposit(tenant.plan);
 
     try {
       const appointment = await this.prisma.$transaction(async (tx) => {
         // Lock advisory baseado no hash do professionalId (evita race entre requests)
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${professional.id}))`;
 
-        // Limite mensal do plano (agendamentos criados no mês corrente)
+        // Limite mensal do plano no mês civil do timezone do tenant (M-04)
         const limit = tenant.subscription?.monthlyBookingLimit;
         if (limit != null) {
-          const monthStart = new Date();
-          monthStart.setUTCDate(1);
-          monthStart.setUTCHours(0, 0, 0, 0);
+          const monthStart = startOfMonthInTimeZone(new Date(), tenant.timezone);
           const monthCount = await tx.appointment.count({
             where: { tenantId: tenant.id, createdAt: { gte: monthStart } },
           });
@@ -345,6 +495,7 @@ export class AppointmentsService {
               data: {
                 name: dto.clientName,
                 email: dto.clientEmail ?? existingClient.email,
+                ...(dto.marketingOptIn !== undefined ? { marketingOptIn: dto.marketingOptIn } : {}),
               },
             })
           : await tx.client.create({
@@ -353,6 +504,7 @@ export class AppointmentsService {
                 name: dto.clientName,
                 phone: dto.clientPhone,
                 email: dto.clientEmail,
+                marketingOptIn: dto.marketingOptIn ?? false,
               },
             });
 
@@ -395,7 +547,25 @@ export class AppointmentsService {
       }
 
       return {
-        ...appointment,
+        id: appointment.id,
+        startsAt: appointment.startsAt,
+        endsAt: appointment.endsAt,
+        status: appointment.status,
+        priceCentsSnapshot: appointment.priceCentsSnapshot,
+        durationMinutesSnapshot: appointment.durationMinutesSnapshot,
+        customerNotes: appointment.customerNotes,
+        client: {
+          id: appointment.client.id,
+          name: appointment.client.name,
+          phone: maskPhone(appointment.client.phone),
+          email: maskEmail(appointment.client.email),
+        },
+        service: {
+          id: appointment.service.id,
+          name: appointment.service.name,
+          durationMinutes: appointment.service.durationMinutes,
+          priceCents: appointment.service.priceCents,
+        },
         manageUrl: `${this.env.appPublicUrl}/agendamento/${appointment.manageToken}`,
         pix,
         depositCents: service.depositCents,
@@ -415,6 +585,9 @@ export class AppointmentsService {
     amountCents: number,
     dto: BookPublicDto,
   ) {
+    if (amountCents <= 0) {
+      throw new BadRequestException('Sinal inválido para cobrança PIX');
+    }
     try {
       const charge = await this.mercadoPago.createPixCharge({
         amountCents,
@@ -423,6 +596,14 @@ export class AppointmentsService {
         payerName: dto.clientName,
         externalReference: appointmentId,
       });
+      // Consistência appointment ↔ PixCharge: só persiste se ainda PENDING_PAYMENT
+      const stillPending = await this.prisma.appointment.findFirst({
+        where: { id: appointmentId, status: AppointmentStatus.PENDING_PAYMENT },
+        select: { id: true },
+      });
+      if (!stillPending) {
+        throw new BadRequestException('Agendamento não está mais aguardando pagamento');
+      }
       await this.prisma.pixCharge.create({
         data: {
           tenantId: tenant.id,
@@ -432,6 +613,7 @@ export class AppointmentsService {
           copyPaste: charge.copyPaste,
           qrCodeBase64: charge.qrCodeBase64,
           expiresAt: charge.expiresAt,
+          status: PixChargeStatus.PENDING,
         },
       });
       return {
@@ -441,14 +623,30 @@ export class AppointmentsService {
         amountCents,
         expiresAt: charge.expiresAt?.toISOString() ?? null,
       };
-    } catch {
-      // Falha no PSP não pode matar o booking: degrada para "pagar no local"
-      await this.prisma.appointment.update({
-        where: { id: appointmentId },
-        data: { status: AppointmentStatus.SCHEDULED },
+    } catch (error) {
+      if (error instanceof BadRequestException) {
+        await this.prisma.appointment.updateMany({
+          where: { id: appointmentId, status: AppointmentStatus.PENDING_PAYMENT },
+          data: {
+            status: AppointmentStatus.CANCELLED,
+            cancelledAt: new Date(),
+            cancelReason: 'Falha ao gerar cobrança PIX do sinal',
+          },
+        });
+        throw error;
+      }
+      // Fail-closed: cancela PENDING_PAYMENT e libera o slot se o PSP falhou
+      await this.prisma.appointment.updateMany({
+        where: { id: appointmentId, status: AppointmentStatus.PENDING_PAYMENT },
+        data: {
+          status: AppointmentStatus.CANCELLED,
+          cancelledAt: new Date(),
+          cancelReason: 'Falha ao gerar cobrança PIX do sinal',
+        },
       });
-      await this.notifications.enqueueBookingConfirmation(appointmentId);
-      return null;
+      throw new BadRequestException(
+        'Não foi possível gerar o PIX do sinal. Tente novamente em instantes.',
+      );
     }
   }
 
@@ -494,10 +692,25 @@ export class AppointmentsService {
     const canCancelUntil = new Date(
       appointment.startsAt.getTime() - appointment.tenant.cancelMinHours * 3_600_000,
     );
+    // Resposta mínima: sem manageToken no body e PII mascarada (link já autentica o cliente)
     return {
-      ...appointment,
-      canCancel:
-        ACTIVE_APPOINTMENT_STATUSES.includes(appointment.status) && new Date() < canCancelUntil,
+      id: appointment.id,
+      startsAt: appointment.startsAt,
+      endsAt: appointment.endsAt,
+      status: appointment.status,
+      priceCentsSnapshot: appointment.priceCentsSnapshot,
+      durationMinutesSnapshot: appointment.durationMinutesSnapshot,
+      client: {
+        name: appointment.client.name,
+        phone: maskPhone(appointment.client.phone),
+        email: maskEmail(appointment.client.email),
+      },
+      service: appointment.service,
+      professional: appointment.professional,
+      tenant: appointment.tenant,
+      pixCharge: appointment.pixCharge,
+      review: appointment.review,
+      canCancel: isCancellableStatus(appointment.status) && new Date() < canCancelUntil,
       canCancelUntil: canCancelUntil.toISOString(),
       canReview: appointment.status === AppointmentStatus.COMPLETED && appointment.review === null,
     };
@@ -505,9 +718,10 @@ export class AppointmentsService {
 
   async confirmByToken(token: string) {
     const appointment = await this.findByManageToken(token);
-    if (appointment.status !== AppointmentStatus.SCHEDULED) {
+    if (appointment.status === AppointmentStatus.CONFIRMED) {
       return { ok: true, status: appointment.status };
     }
+    assertValidTransition(appointment.status, AppointmentStatus.CONFIRMED);
     await this.prisma.appointment.update({
       where: { id: appointment.id },
       data: { status: AppointmentStatus.CONFIRMED },
@@ -517,9 +731,10 @@ export class AppointmentsService {
 
   async cancelByToken(token: string, reason?: string) {
     const appointment = await this.findByManageToken(token);
-    if (!ACTIVE_APPOINTMENT_STATUSES.includes(appointment.status)) {
+    if (!isCancellableStatus(appointment.status)) {
       throw new BadRequestException('Este agendamento não pode mais ser cancelado');
     }
+    assertValidTransition(appointment.status, AppointmentStatus.CANCELLED);
 
     const limitMs = appointment.tenant.cancelMinHours * 3_600_000;
     if (appointment.startsAt.getTime() - Date.now() < limitMs) {
@@ -540,7 +755,13 @@ export class AppointmentsService {
     await this.notifications.enqueueBookingCancelled(appointment.id, 'client');
     const tenant = await this.prisma.tenant.findUnique({ where: { id: appointment.tenantId } });
     if (tenant) {
-      await this.notifyWaitlist(appointment.tenantId, appointment.startsAt, tenant);
+      await notifyNextWaitlistCandidate(
+        this.prisma,
+        this.notifications,
+        appointment.tenantId,
+        appointment.startsAt,
+        tenant,
+      );
     }
 
     return { ok: true };
@@ -548,7 +769,7 @@ export class AppointmentsService {
 
   async rescheduleByToken(token: string, dto: RescheduleDto) {
     const appointment = await this.findByManageToken(token);
-    if (!ACTIVE_APPOINTMENT_STATUSES.includes(appointment.status)) {
+    if (!isCancellableStatus(appointment.status)) {
       throw new BadRequestException('Este agendamento não pode mais ser remarcado');
     }
 
@@ -582,6 +803,12 @@ export class AppointmentsService {
       throw new ConflictException('Horário indisponível');
     }
 
+    const nextStatus =
+      appointment.status === AppointmentStatus.PENDING_PAYMENT
+        ? AppointmentStatus.PENDING_PAYMENT
+        : AppointmentStatus.SCHEDULED;
+    assertValidTransition(appointment.status, nextStatus);
+
     try {
       await this.prisma.$transaction(async (tx) => {
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${professional.id}))`;
@@ -605,10 +832,7 @@ export class AppointmentsService {
           data: {
             startsAt: newStartsAt,
             endsAt: newEndsAt,
-            status:
-              appointment.status === AppointmentStatus.PENDING_PAYMENT
-                ? appointment.status
-                : AppointmentStatus.SCHEDULED,
+            status: nextStatus,
           },
         });
       });
@@ -619,8 +843,14 @@ export class AppointmentsService {
       throw error;
     }
 
-    // Horário antigo abriu: avisa a lista de espera e reenvia confirmação
-    await this.notifyWaitlist(appointment.tenantId, appointment.startsAt, tenant);
+    // Horário antigo abriu: avisa o próximo da lista de espera e reenvia confirmação
+    await notifyNextWaitlistCandidate(
+      this.prisma,
+      this.notifications,
+      appointment.tenantId,
+      appointment.startsAt,
+      tenant,
+    );
     await this.notifications.enqueueBookingConfirmation(appointment.id);
 
     return { ok: true, startsAt: newStartsAt.toISOString() };
@@ -635,7 +865,7 @@ export class AppointmentsService {
       throw new ConflictException('Este atendimento já foi avaliado');
     }
 
-    return this.prisma.review.create({
+    const created = await this.prisma.review.create({
       data: {
         tenantId: appointment.tenantId,
         appointmentId: appointment.id,
@@ -645,35 +875,7 @@ export class AppointmentsService {
       },
       select: { id: true, rating: true, comment: true, createdAt: true },
     });
-  }
-
-  /** Notifica (até 5) clientes na lista de espera do dia em que abriu vaga. */
-  private async notifyWaitlist(
-    tenantId: string,
-    slotDate: Date,
-    tenant: Pick<Tenant, 'name' | 'slug' | 'timezone'>,
-  ) {
-    const dateKey = toDateKey(slotDate, tenant.timezone);
-    const entries = await this.prisma.waitlistEntry.findMany({
-      where: { tenantId, dateKey, status: WaitlistStatus.WAITING },
-      orderBy: { createdAt: 'asc' },
-      take: 5,
-    });
-
-    for (const entry of entries) {
-      await this.notifications.enqueueWaitlistSlotOpen({
-        tenantId,
-        tenantName: tenant.name,
-        tenantSlug: tenant.slug,
-        dateKey,
-        clientName: entry.clientName,
-        clientPhone: entry.clientPhone,
-        clientEmail: entry.clientEmail,
-      });
-      await this.prisma.waitlistEntry.update({
-        where: { id: entry.id },
-        data: { status: WaitlistStatus.NOTIFIED, notifiedAt: new Date() },
-      });
-    }
+    await this.cache.invalidatePublicProfile(appointment.tenant.slug);
+    return created;
   }
 }

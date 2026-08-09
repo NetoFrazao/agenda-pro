@@ -1,17 +1,19 @@
 import type { Metadata } from 'next';
-import { Fraunces, Source_Sans_3 } from 'next/font/google';
+import { DM_Sans, Syne } from 'next/font/google';
 import './globals.css';
 
-const display = Fraunces({
+const display = Syne({
   subsets: ['latin'],
   variable: '--font-display',
   display: 'swap',
+  weight: ['500', '600', '700', '800'],
 });
 
-const sans = Source_Sans_3({
+const sans = DM_Sans({
   subsets: ['latin'],
   variable: '--font-sans',
   display: 'swap',
+  weight: ['400', '500', '600', '700'],
 });
 
 export const metadata: Metadata = {
@@ -20,7 +22,7 @@ export const metadata: Metadata = {
     template: '%s · Agenda Pro',
   },
   description:
-    'Agenda online para barbeiros e manicures: página pública de agendamento e painel profissional.',
+    'Agenda online premium para barbeiros e manicures: link público, lembretes no WhatsApp, sinal PIX e painel completo.',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

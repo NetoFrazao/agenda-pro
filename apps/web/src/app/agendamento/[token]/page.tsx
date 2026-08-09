@@ -32,7 +32,7 @@ function StarPicker({ value, onChange }: { value: number; onChange: (v: number) 
           aria-checked={value === n}
           aria-label={`${n} estrela${n > 1 ? 's' : ''}`}
           onClick={() => onChange(n)}
-          className={`text-3xl transition ${n <= value ? 'text-amber-500' : 'text-stone-300 hover:text-amber-400'}`}
+          className={`text-3xl transition ${n <= value ? 'text-amber-500' : 'text-[#d5dbd6] hover:text-amber-400'}`}
         >
           ★
         </button>
@@ -237,53 +237,62 @@ export default function ManageAppointmentPage() {
 
   return (
     <div className="flex min-h-screen flex-col bg-atmosphere">
-      <header className="border-b border-stone-200/70 bg-white/50 px-6 py-5 backdrop-blur">
-        <div className="mx-auto flex max-w-2xl items-center justify-between gap-4">
+      <header className="glass-panel border-b border-line/60 px-6 py-6">
+        <div className="mx-auto flex max-w-2xl items-start justify-between gap-4">
           <div>
-            <p className="font-display text-2xl font-semibold text-stone-900">{data.tenant.name}</p>
-            <p className="text-sm text-stone-500">Meu agendamento</p>
+            <p className="font-display text-2xl font-semibold tracking-tight text-ink sm:text-3xl">
+              {data.tenant.name}
+            </p>
+            <p className="mt-1 text-sm text-muted">Meu agendamento</p>
           </div>
-          <BrandLogo href="/" size="sm" className="!text-base opacity-70" />
+          <BrandLogo href="/" size="sm" className="shrink-0 opacity-60" />
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-2xl flex-1 space-y-6 px-6 py-8">
+      <main className="mx-auto w-full max-w-2xl flex-1 space-y-5 px-6 py-8">
         {actionError ? <Alert>{actionError}</Alert> : null}
         {actionSuccess ? <Alert tone="success">{actionSuccess}</Alert> : null}
 
-        <section
-          aria-label="Detalhes do agendamento"
-          className="rounded-lg bg-white p-5 ring-1 ring-stone-200"
-        >
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <h1 className="font-display text-xl font-semibold text-stone-900">
-              {data.service.name}
-            </h1>
+        <section aria-label="Detalhes do agendamento" className="surface-elevated rounded-2xl p-6">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <h1 className="font-display text-xl font-semibold text-ink">{data.service.name}</h1>
             <StatusBadge status={data.status} />
           </div>
-          <dl className="mt-4 space-y-3 text-sm">
+          <dl className="mt-5 space-y-4 text-sm">
             <div>
-              <dt className="text-stone-500">Quando</dt>
-              <dd className="font-medium text-stone-900">
+              <dt className="text-xs font-semibold uppercase tracking-wide text-[#6b736e]">
+                Quando
+              </dt>
+              <dd className="mt-1 font-medium text-ink">
                 {formatDate(data.startsAt, timezone)} às {formatTime(data.startsAt, timezone)}
               </dd>
             </div>
             <div>
-              <dt className="text-stone-500">Profissional</dt>
-              <dd className="font-medium text-stone-900">{data.professional.name}</dd>
+              <dt className="text-xs font-semibold uppercase tracking-wide text-[#6b736e]">
+                Profissional
+              </dt>
+              <dd className="mt-1 font-medium text-ink">{data.professional.name}</dd>
             </div>
             <div>
-              <dt className="text-stone-500">Cliente</dt>
-              <dd className="font-medium text-stone-900">{data.client.name}</dd>
+              <dt className="text-xs font-semibold uppercase tracking-wide text-[#6b736e]">
+                Cliente
+              </dt>
+              <dd className="mt-1 font-medium text-ink">{data.client.name}</dd>
             </div>
             <div>
-              <dt className="text-stone-500">Valor</dt>
-              <dd className="font-medium text-stone-900">{formatBRL(data.priceCentsSnapshot)}</dd>
+              <dt className="text-xs font-semibold uppercase tracking-wide text-[#6b736e]">
+                Valor
+              </dt>
+              <dd className="mt-1 font-display text-lg font-semibold text-teal-800">
+                {formatBRL(data.priceCentsSnapshot)}
+              </dd>
             </div>
             {data.tenant.address ? (
               <div>
-                <dt className="text-stone-500">Endereço</dt>
-                <dd className="font-medium text-stone-900">{data.tenant.address}</dd>
+                <dt className="text-xs font-semibold uppercase tracking-wide text-[#6b736e]">
+                  Endereço
+                </dt>
+                <dd className="mt-1 font-medium text-ink">{data.tenant.address}</dd>
               </div>
             ) : null}
           </dl>
@@ -301,23 +310,24 @@ export default function ManageAppointmentPage() {
         ) : null}
 
         {isActive ? (
-          <section aria-label="Ações" className="rounded-lg bg-white p-5 ring-1 ring-stone-200">
-            <h2 className="font-display text-lg font-semibold text-stone-900">
-              Precisa mudar algo?
-            </h2>
+          <section aria-label="Ações" className="surface-elevated rounded-2xl p-6">
+            <h2 className="font-display text-lg font-semibold text-ink">Precisa mudar algo?</h2>
             {data.canCancel ? (
-              <p className="mt-1 text-sm text-stone-600">
+              <p className="mt-2 text-sm text-[#6b736e]">
                 Cancelamento e remarcação gratuitos até{' '}
-                <strong>{formatDateTime(data.canCancelUntil, timezone)}</strong>.
+                <strong className="text-ink">
+                  {formatDateTime(data.canCancelUntil, timezone)}
+                </strong>
+                .
               </p>
             ) : (
-              <p className="mt-1 text-sm text-stone-600">
+              <p className="mt-2 text-sm text-[#6b736e]">
                 O prazo para cancelar ou remarcar online já passou ({data.tenant.cancelMinHours}h
                 antes do horário). Fale direto com o estabelecimento.
               </p>
             )}
 
-            <div className="mt-4 flex flex-wrap gap-2">
+            <div className="mt-5 flex flex-wrap gap-2">
               {data.status === 'SCHEDULED' ? (
                 <Button
                   type="button"
@@ -358,7 +368,7 @@ export default function ManageAppointmentPage() {
             {cancelOpen ? (
               <form
                 onSubmit={cancelAppointment}
-                className="mt-5 space-y-3 rounded-md bg-stone-50 p-4 ring-1 ring-stone-200"
+                className="mt-5 space-y-4 rounded-xl bg-[#f1f4f0] p-5 ring-1 ring-[#d5dbd6]"
               >
                 <Field label="Motivo (opcional)" id="cancel-reason">
                   <Textarea
@@ -380,7 +390,7 @@ export default function ManageAppointmentPage() {
             ) : null}
 
             {rescheduleOpen ? (
-              <div className="mt-5 space-y-4 rounded-md bg-stone-50 p-4 ring-1 ring-stone-200">
+              <div className="mt-5 space-y-4 rounded-xl bg-[#f1f4f0] p-5 ring-1 ring-[#d5dbd6]">
                 <div className="max-w-xs">
                   <Field label="Nova data" id="new-date">
                     <Input
@@ -410,11 +420,8 @@ export default function ManageAppointmentPage() {
                             type="button"
                             role="option"
                             aria-selected={selected}
-                            className={`w-full rounded-md px-2 py-2.5 text-sm font-semibold ring-1 transition ${
-                              selected
-                                ? 'bg-emerald-700 text-white ring-emerald-700'
-                                : 'bg-white text-stone-800 ring-stone-300 hover:ring-emerald-600'
-                            }`}
+                            data-selected={selected}
+                            className="slot-chip w-full rounded-xl bg-white px-2 py-2.5 text-sm font-semibold text-ink ring-1 ring-[#d5dbd6] hover:ring-teal-700/40"
                             onClick={() => setNewSlot(iso)}
                           >
                             {formatTime(iso, timezone)}
@@ -442,27 +449,21 @@ export default function ManageAppointmentPage() {
         ) : null}
 
         {data.review ? (
-          <section
-            aria-label="Sua avaliação"
-            className="rounded-lg bg-white p-5 ring-1 ring-stone-200"
-          >
-            <h2 className="font-display text-lg font-semibold text-stone-900">Sua avaliação</h2>
+          <section aria-label="Sua avaliação" className="surface-elevated rounded-2xl p-6">
+            <h2 className="font-display text-lg font-semibold text-ink">Sua avaliação</h2>
             <div className="mt-3">
               <Stars value={data.review.rating} size="lg" />
               {data.review.comment ? (
-                <p className="mt-2 text-sm text-stone-700">{data.review.comment}</p>
+                <p className="mt-2 text-sm leading-relaxed text-[#3f4742]">{data.review.comment}</p>
               ) : null}
             </div>
           </section>
         ) : data.canReview ? (
-          <section
-            aria-label="Avaliar atendimento"
-            className="rounded-lg bg-white p-5 ring-1 ring-stone-200"
-          >
-            <h2 className="font-display text-lg font-semibold text-stone-900">
+          <section aria-label="Avaliar atendimento" className="surface-elevated rounded-2xl p-6">
+            <h2 className="font-display text-lg font-semibold text-ink">
               Como foi seu atendimento?
             </h2>
-            <form onSubmit={submitReview} className="mt-4 space-y-4">
+            <form onSubmit={submitReview} className="mt-5 space-y-4">
               <StarPicker value={rating} onChange={setRating} />
               <Field label="Comentário (opcional)" id="review-comment">
                 <Textarea

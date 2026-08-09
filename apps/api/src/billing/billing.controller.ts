@@ -1,10 +1,12 @@
 import { Body, Controller, Get, Headers, Post, Req, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiProperty, ApiTags } from '@nestjs/swagger';
-import { PlanCode } from '@prisma/client';
+import { PlanCode, UserRole } from '@prisma/client';
 import { IsEnum } from 'class-validator';
 import type { Request } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AuthUser, CurrentUser } from '../common/decorators/current-user.decorator';
+import { Roles } from '../common/decorators/roles.decorator';
+import { RolesGuard } from '../common/decorators/roles.guard';
 import { BillingService } from './billing.service';
 
 class CheckoutDto {
@@ -24,14 +26,16 @@ export class BillingController {
   }
 
   @Post('checkout')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.OWNER)
   @ApiBearerAuth()
   checkout(@CurrentUser() user: AuthUser, @Body() dto: CheckoutDto) {
     return this.billing.createCheckout(user.tenantId, dto.plan);
   }
 
   @Post('cancel')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.OWNER)
   @ApiBearerAuth()
   cancel(@CurrentUser() user: AuthUser) {
     return this.billing.cancel(user.tenantId);

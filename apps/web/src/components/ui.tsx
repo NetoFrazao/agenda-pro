@@ -1,39 +1,63 @@
-import type {
-  ButtonHTMLAttributes,
-  InputHTMLAttributes,
-  ReactNode,
-  SelectHTMLAttributes,
-  TextareaHTMLAttributes,
+import {
+  cloneElement,
+  isValidElement,
+  type ButtonHTMLAttributes,
+  type InputHTMLAttributes,
+  type ReactElement,
+  type ReactNode,
+  type SelectHTMLAttributes,
+  type TextareaHTMLAttributes,
 } from 'react';
 import { APPOINTMENT_STATUS_LABEL, APPOINTMENT_STATUS_TONE, type BadgeTone } from '@/lib/format';
 
 type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
-  variant?: 'primary' | 'secondary' | 'danger' | 'ghost';
+  variant?: 'primary' | 'secondary' | 'danger' | 'ghost' | 'dark';
   fullWidth?: boolean;
+  size?: 'sm' | 'md' | 'lg';
+  loading?: boolean;
 };
 
 const buttonVariants: Record<NonNullable<ButtonProps['variant']>, string> = {
-  primary: 'bg-emerald-700 text-white hover:bg-emerald-800 disabled:bg-emerald-700/50',
+  primary:
+    'bg-mint-deep text-white shadow-[0_10px_24px_-14px_rgba(15,118,110,0.9)] hover:bg-[#0b5f58] disabled:bg-mint-deep/45',
   secondary:
-    'bg-white text-stone-800 ring-1 ring-stone-300 hover:bg-stone-50 disabled:text-stone-400',
-  danger: 'bg-red-700 text-white hover:bg-red-800 disabled:bg-red-700/50',
-  ghost: 'bg-transparent text-stone-700 hover:bg-stone-100 disabled:text-stone-400',
+    'bg-white/90 text-ink border border-line hover:bg-white disabled:text-muted-soft',
+  danger: 'bg-danger text-white hover:bg-red-800 disabled:bg-danger/50',
+  ghost: 'bg-transparent text-ink-muted hover:bg-black/[0.04] disabled:text-muted-soft',
+  dark: 'bg-ink text-white hover:bg-ink-soft disabled:bg-ink/50',
+};
+
+const buttonSizes: Record<NonNullable<ButtonProps['size']>, string> = {
+  sm: 'min-h-9 rounded-lg px-3 py-2 text-xs',
+  md: 'min-h-11 rounded-xl px-4 py-2.5 text-sm',
+  lg: 'min-h-12 rounded-2xl px-6 py-3.5 text-sm',
 };
 
 export function Button({
   variant = 'primary',
+  size = 'md',
   fullWidth,
+  loading = false,
   className = '',
   type = 'button',
   children,
+  disabled,
   ...props
 }: ButtonProps) {
   return (
     <button
       type={type}
-      className={`inline-flex items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm font-semibold transition disabled:cursor-not-allowed ${buttonVariants[variant]} ${fullWidth ? 'w-full' : ''} ${className}`}
+      disabled={disabled || loading}
+      aria-busy={loading || undefined}
+      className={`inline-flex items-center justify-center gap-2 font-semibold tracking-tight transition duration-150 disabled:cursor-not-allowed ${buttonVariants[variant]} ${buttonSizes[size]} ${fullWidth ? 'w-full' : ''} ${className}`}
       {...props}
     >
+      {loading ? (
+        <span
+          className="inline-block size-3.5 shrink-0 animate-spin rounded-full border-2 border-current border-t-transparent opacity-80"
+          aria-hidden
+        />
+      ) : null}
       {children}
     </button>
   );
@@ -48,15 +72,28 @@ type FieldProps = {
 };
 
 export function Field({ label, id, hint, error, children }: FieldProps) {
+  const describedBy = error ? `${id}-error` : hint ? `${id}-hint` : undefined;
+  const control = isValidElement(children)
+    ? cloneElement(children as ReactElement<Record<string, unknown>>, {
+        id,
+        'aria-invalid': error ? true : undefined,
+        'aria-describedby': describedBy,
+      })
+    : children;
+
   return (
     <div className="flex flex-col gap-1.5">
-      <label htmlFor={id} className="text-sm font-medium text-stone-800">
+      <label htmlFor={id} className="text-sm font-medium text-ink-soft">
         {label}
       </label>
-      {children}
-      {hint && !error ? <p className="text-xs text-stone-500">{hint}</p> : null}
+      {control}
+      {hint && !error ? (
+        <p id={`${id}-hint`} className="text-xs text-muted">
+          {hint}
+        </p>
+      ) : null}
       {error ? (
-        <p id={`${id}-error`} className="text-xs text-red-700" role="alert">
+        <p id={`${id}-error`} className="text-xs text-danger" role="alert">
           {error}
         </p>
       ) : null}
@@ -65,7 +102,7 @@ export function Field({ label, id, hint, error, children }: FieldProps) {
 }
 
 const controlClass =
-  'w-full rounded-md border border-stone-300 bg-white px-3 py-2.5 text-sm text-stone-900 placeholder:text-stone-400 focus:border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-600/20 disabled:bg-stone-100';
+  'w-full min-h-11 rounded-xl border border-line bg-white px-3.5 py-2.5 text-sm text-ink placeholder:text-muted-soft shadow-[inset_0_1px_0_rgba(255,255,255,0.7)] transition focus:border-mint-deep focus:outline-none focus:ring-4 focus:ring-mint-deep/10 disabled:bg-paper-2';
 
 export function Input({ className = '', id, ...props }: InputHTMLAttributes<HTMLInputElement>) {
   return <input id={id} className={`${controlClass} ${className}`} {...props} />;
@@ -100,39 +137,73 @@ export function Alert({
   tone?: 'error' | 'success' | 'info';
 }) {
   const tones = {
-    error: 'border-red-200 bg-red-50 text-red-800',
-    success: 'border-emerald-200 bg-emerald-50 text-emerald-900',
-    info: 'border-stone-200 bg-stone-50 text-stone-700',
+    error: 'border-danger-border bg-danger-bg text-red-900',
+    success: 'border-success-border bg-success-bg text-teal-950',
+    info: 'border-line bg-white/70 text-ink-muted',
   };
   return (
-    <div role="alert" className={`rounded-md border px-3 py-2 text-sm ${tones[tone]}`}>
+    <div
+      role="alert"
+      className={`rounded-xl border px-3.5 py-2.5 text-sm leading-relaxed ${tones[tone]}`}
+    >
       {children}
     </div>
   );
 }
 
-export function PageTitle({ title, description }: { title: string; description?: string }) {
+export function PageTitle({
+  title,
+  description,
+  action,
+}: {
+  title: string;
+  description?: string;
+  action?: ReactNode;
+}) {
   return (
-    <div className="mb-8">
-      <h1 className="font-display text-3xl font-semibold tracking-tight text-stone-900">{title}</h1>
-      {description ? <p className="mt-2 max-w-2xl text-stone-600">{description}</p> : null}
+    <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+      <div>
+        <h1 className="font-display text-3xl font-semibold tracking-tight text-ink sm:text-[2rem]">
+          {title}
+        </h1>
+        {description ? (
+          <p className="mt-2 max-w-2xl text-[15px] leading-relaxed text-muted">{description}</p>
+        ) : null}
+      </div>
+      {action ? <div className="shrink-0">{action}</div> : null}
     </div>
   );
 }
 
-export function EmptyState({ children }: { children: ReactNode }) {
+export function EmptyState({
+  title,
+  children,
+  action,
+}: {
+  title?: string;
+  children: ReactNode;
+  action?: ReactNode;
+}) {
   return (
-    <div className="rounded-lg border border-dashed border-stone-300 bg-white/60 px-6 py-10 text-center text-sm text-stone-600">
-      {children}
+    <div className="rounded-2xl border border-dashed border-[#c9d0cb] bg-white/50 px-6 py-12 text-center">
+      {title ? (
+        <p className="font-display text-base font-semibold text-ink">{title}</p>
+      ) : null}
+      <div
+        className={`text-sm leading-relaxed text-muted ${title ? 'mt-2' : ''} ${action ? 'mb-5' : ''}`}
+      >
+        {children}
+      </div>
+      {action ? <div className="flex justify-center">{action}</div> : null}
     </div>
   );
 }
 
 export function Spinner({ label = 'Carregando…' }: { label?: string }) {
   return (
-    <div className="flex items-center gap-3 text-sm text-stone-600" role="status">
+    <div className="flex items-center gap-3 text-sm text-muted" role="status">
       <span
-        className="inline-block size-4 animate-spin rounded-full border-2 border-stone-300 border-t-emerald-700"
+        className="inline-block size-4 animate-spin rounded-full border-2 border-line border-t-mint-deep"
         aria-hidden
       />
       <span>{label}</span>
@@ -140,19 +211,68 @@ export function Spinner({ label = 'Carregando…' }: { label?: string }) {
   );
 }
 
+export function Skeleton({ className = '' }: { className?: string }) {
+  return (
+    <div
+      className={`animate-skeleton rounded-xl bg-paper-2 ${className}`}
+      aria-hidden
+    />
+  );
+}
+
+export function PageSkeleton({
+  cards = 4,
+  rows = 4,
+}: {
+  cards?: number;
+  rows?: number;
+}) {
+  return (
+    <div className="space-y-8" role="status" aria-label="Carregando">
+      <div className="space-y-3">
+        <Skeleton className="h-9 w-48 sm:w-64" />
+        <Skeleton className="h-4 w-72 max-w-full" />
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {Array.from({ length: cards }).map((_, i) => (
+          <Skeleton key={i} className="h-28 rounded-2xl" />
+        ))}
+      </div>
+      <div className="space-y-3">
+        <Skeleton className="h-6 w-40" />
+        <div className="surface-elevated overflow-hidden rounded-2xl">
+          {Array.from({ length: rows }).map((_, i) => (
+            <div
+              key={i}
+              className="flex items-center justify-between gap-4 border-b border-paper-2 px-5 py-4 last:border-0"
+            >
+              <div className="flex-1 space-y-2">
+                <Skeleton className="h-4 w-36" />
+                <Skeleton className="h-3 w-52 max-w-full" />
+              </div>
+              <Skeleton className="h-4 w-24" />
+            </div>
+          ))}
+        </div>
+      </div>
+      <span className="sr-only">Carregando…</span>
+    </div>
+  );
+}
+
 const badgeTones: Record<BadgeTone, string> = {
-  emerald: 'bg-emerald-100 text-emerald-900',
-  sky: 'bg-sky-100 text-sky-900',
-  amber: 'bg-amber-100 text-amber-900',
-  red: 'bg-red-100 text-red-900',
-  orange: 'bg-orange-100 text-orange-900',
-  stone: 'bg-stone-200 text-stone-700',
+  emerald: 'bg-teal-100 text-teal-950',
+  sky: 'bg-sky-100 text-sky-950',
+  amber: 'bg-amber-100 text-amber-950',
+  red: 'bg-red-100 text-red-950',
+  orange: 'bg-orange-100 text-orange-950',
+  stone: 'bg-paper-2 text-ink-muted',
 };
 
 export function Badge({ tone = 'stone', children }: { tone?: BadgeTone; children: ReactNode }) {
   return (
     <span
-      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${badgeTones[tone]}`}
+      className={`inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-semibold tracking-wide ${badgeTones[tone]}`}
     >
       {children}
     </span>
@@ -167,12 +287,11 @@ export function StatusBadge({ status }: { status: string }) {
   );
 }
 
-/** Estrelas somente-leitura (avaliações). */
 export function Stars({ value, size = 'sm' }: { value: number; size?: 'sm' | 'lg' }) {
   const rounded = Math.round(value);
   return (
     <span
-      className={`inline-flex text-amber-500 ${size === 'lg' ? 'text-xl' : 'text-sm'}`}
+      className={`inline-flex gap-0.5 text-amber-500 ${size === 'lg' ? 'text-xl' : 'text-sm'}`}
       role="img"
       aria-label={`${value.toLocaleString('pt-BR')} de 5 estrelas`}
     >
@@ -199,29 +318,61 @@ export function Modal({
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
       role="dialog"
       aria-modal="true"
-      aria-label={title}
+      aria-labelledby="modal-title"
     >
       <button
         type="button"
-        className="absolute inset-0 cursor-default bg-stone-900/40"
+        className="absolute inset-0 cursor-default bg-ink/55 backdrop-blur-[2px]"
         onClick={onClose}
         aria-label="Fechar janela"
         tabIndex={-1}
       />
-      <div className="relative max-h-[90vh] w-full max-w-md overflow-y-auto rounded-lg bg-white p-6 shadow-xl">
+      <div className="relative max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl bg-white p-6 shadow-[var(--shadow-modal)]">
         <div className="flex items-start justify-between gap-4">
-          <h2 className="font-display text-lg font-semibold text-stone-900">{title}</h2>
+          <h2 id="modal-title" className="font-display text-lg font-semibold text-ink">
+            {title}
+          </h2>
           <button
             type="button"
             onClick={onClose}
             aria-label="Fechar"
-            className="rounded-md px-2 py-0.5 text-lg leading-none text-stone-500 hover:bg-stone-100 hover:text-stone-900"
+            className="touch-target inline-flex items-center justify-center rounded-lg text-lg leading-none text-muted hover:bg-paper hover:text-ink"
           >
             ×
           </button>
         </div>
         <div className="mt-4">{children}</div>
       </div>
+    </div>
+  );
+}
+
+export function StatCard({
+  label,
+  value,
+  hint,
+  accent,
+}: {
+  label: string;
+  value: ReactNode;
+  hint?: ReactNode;
+  accent?: boolean;
+}) {
+  return (
+    <div className={`rounded-2xl p-5 ${accent ? 'bg-ink text-white' : 'surface-elevated'}`}>
+      <p
+        className={`text-[11px] font-semibold uppercase tracking-[0.14em] ${accent ? 'text-white/55' : 'text-muted'}`}
+      >
+        {label}
+      </p>
+      <div
+        className={`mt-3 font-display text-3xl font-semibold tracking-tight ${accent ? 'text-white' : 'text-ink'}`}
+      >
+        {value}
+      </div>
+      {hint ? (
+        <div className={`mt-2 text-sm ${accent ? 'text-white/65' : 'text-muted'}`}>{hint}</div>
+      ) : null}
     </div>
   );
 }

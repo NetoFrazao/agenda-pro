@@ -1,13 +1,16 @@
 import { Body, Controller, Delete, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { UserRole } from '@prisma/client';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AuthUser, CurrentUser } from '../common/decorators/current-user.decorator';
+import { Roles } from '../common/decorators/roles.decorator';
+import { RolesGuard } from '../common/decorators/roles.guard';
 import { AvailabilityService } from './availability.service';
 import { CreateAvailabilityExceptionDto, CreateAvailabilityRuleDto } from './dto/availability.dto';
 
 @ApiTags('availability')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('availability')
 export class AvailabilityController {
   constructor(private readonly availability: AvailabilityService) {}
@@ -18,11 +21,13 @@ export class AvailabilityController {
   }
 
   @Post('rules')
+  @Roles(UserRole.OWNER)
   create(@CurrentUser() user: AuthUser, @Body() dto: CreateAvailabilityRuleDto) {
     return this.availability.createRule(user.tenantId, user.userId, dto);
   }
 
   @Delete('rules/:id')
+  @Roles(UserRole.OWNER)
   remove(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     return this.availability.deleteRule(user.tenantId, id);
   }
@@ -37,11 +42,13 @@ export class AvailabilityController {
   }
 
   @Post('exceptions')
+  @Roles(UserRole.OWNER)
   createException(@CurrentUser() user: AuthUser, @Body() dto: CreateAvailabilityExceptionDto) {
     return this.availability.createException(user.tenantId, dto);
   }
 
   @Delete('exceptions/:id')
+  @Roles(UserRole.OWNER)
   removeException(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     return this.availability.deleteException(user.tenantId, id);
   }

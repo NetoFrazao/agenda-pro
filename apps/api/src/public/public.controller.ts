@@ -23,6 +23,7 @@ export class PublicController {
   // Rotas fixas antes de :slug para não haver colisão de rota.
 
   @Get('appointments/:token')
+  @Throttle({ default: { limit: 30, ttl: 60_000 } })
   @ApiOperation({ summary: 'Detalhe do agendamento via link do cliente' })
   manageDetail(@Param('token') token: string) {
     return this.appointments.getByManageToken(token);

@@ -1,0 +1,41 @@
+# syntax=docker/dockerfile:1
+# Multi-stage API image — build no monorepo, runtime non-root.
+# Build (raiz do repo): docker build -f apps/api/Dockerfile -t agenda-pro-api .
+
+FROM node:20-alpine AS deps
+WORKDIR /app
+RUN apk add --no-cache openssl
+COPY package.json package-lock.json ./
+COPY apps/api/package.json ./apps/api/
+COPY apps/web/package.json ./apps/web/
+RUN npm ci
+
+FROM node:20-alpine AS build
+WORKDIR /app
+RUN apk add --no-cache openssl
+COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deps /app/package.json /app/package-lock.json ./
+COPY --from=deps /app/apps/api/package.json ./apps/api/
+COPY apps/api ./apps/api
+RUN npx prisma generate --schema apps/api/prisma/schema.prisma \
+  && npm run build -w @agenda-pro/api \
+  && npm prune --omit=dev
+
+FROM node:20-alpine AS runner
+WORKDIR /app
+ENV NODE_ENV=production
+RUN apk add --no-cache openssl wget \
+  && addgroup -S app && adduser -S app -G app
+
+COPY --from=build --chown=app:app /app/node_modules ./node_modules
+COPY --from=build --chown=app:app /app/package.json ./
+COPY --from=build --chown=app:app /app/apps/api/package.json ./apps/api/
+COPY --from=build --chown=app:app /app/apps/api/dist ./apps/api/dist
+COPY --from=build --chown=app:app /app/apps/api/prisma ./apps/api/prisma
+
+USER app
+EXPOSE 3001
+HEALTHCHECK --interval=15s --timeout=5s --start-period=30s --retries=3 \
+  CMD wget -qO- http://127.0.0.1:3001/api/health/ready || exit 1
+
+CMD ["node", "apps/api/dist/main.js"]

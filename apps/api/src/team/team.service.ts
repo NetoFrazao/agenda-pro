@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { UserRole } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
+import { RedisCacheService } from '../common/cache/redis-cache.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateTeamMemberDto, UpdateTeamMemberDto } from './dto/team.dto';
 
@@ -23,7 +24,10 @@ const MEMBER_SELECT = {
 
 @Injectable()
 export class TeamService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cache: RedisCacheService,
+  ) {}
 
   list(tenantId: string) {
     return this.prisma.user.findMany({
@@ -54,7 +58,7 @@ export class TeamService {
       throw new ConflictException('Já existe um profissional com este e-mail');
     }
 
-    return this.prisma.user.create({
+    const created = await this.prisma.user.create({
       data: {
         tenantId,
         email,
@@ -66,6 +70,8 @@ export class TeamService {
       },
       select: MEMBER_SELECT,
     });
+    await this.cache.invalidatePublicProfile(tenant.slug);
+    return created;
   }
 
   async update(tenantId: string, requesterRole: string, id: string, dto: UpdateTeamMemberDto) {
@@ -76,11 +82,13 @@ export class TeamService {
       throw new BadRequestException('O dono da conta não pode ser desativado');
     }
 
-    return this.prisma.user.update({
+    const updated = await this.prisma.user.update({
       where: { id },
       data: dto,
       select: MEMBER_SELECT,
     });
+    await this.invalidateProfile(tenantId);
+    return updated;
   }
 
   async remove(tenantId: string, requesterRole: string, requesterId: string, id: string) {
@@ -99,7 +107,15 @@ export class TeamService {
       where: { id },
       data: { deletedAt: new Date(), isActive: false },
     });
+    await this.invalidateProfile(tenantId);
     return { ok: true };
+  }
+
+  private async invalidateProfile(tenantId: string) {
+    await this.cache.invalidatePublicProfileByTenantId(tenantId, async (id) => {
+      const t = await this.prisma.tenant.findUnique({ where: { id }, select: { slug: true } });
+      return t?.slug ?? null;
+    });
   }
 
   private assertOwner(role: string) {

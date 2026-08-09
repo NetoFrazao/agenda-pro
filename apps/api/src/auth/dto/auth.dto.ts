@@ -49,6 +49,18 @@ export class LoginDto {
   @IsString()
   @MinLength(8)
   password!: string;
+
+  @ApiPropertyOptional({
+    description: 'Slug do negócio (recomendado se o mesmo e-mail existir em mais de uma conta)',
+    example: 'studio-maria',
+  })
+  @IsOptional()
+  @IsString()
+  @Matches(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, {
+    message: 'slug deve ser kebab-case (a-z, 0-9, hífens)',
+  })
+  @MaxLength(64)
+  tenantSlug?: string;
 }
 
 export class RefreshDto {
@@ -62,6 +74,16 @@ export class ForgotPasswordDto {
   @ApiProperty()
   @IsEmail()
   email!: string;
+
+  @ApiPropertyOptional({
+    description: 'Slug do negócio — obrigatório se o e-mail existir em múltiplos tenants',
+    example: 'studio-maria',
+  })
+  @IsOptional()
+  @IsString()
+  @Matches(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)
+  @MaxLength(64)
+  tenantSlug?: string;
 }
 
 export class ResetPasswordDto {

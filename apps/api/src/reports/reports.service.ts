@@ -22,33 +22,40 @@ export class ReportsService {
       startsAt: { gte: periodStart, lte: periodEnd },
     };
 
-    const [byStatus, completedAgg, topServices, professionals, newClients] = await Promise.all([
-      this.prisma.appointment.groupBy({
-        by: ['status'],
-        where: rangeWhere,
-        _count: true,
-      }),
-      this.prisma.appointment.aggregate({
-        where: { ...rangeWhere, status: AppointmentStatus.COMPLETED },
-        _sum: { priceCentsSnapshot: true },
-        _count: true,
-      }),
-      this.prisma.appointment.groupBy({
-        by: ['serviceId'],
-        where: { ...rangeWhere, status: AppointmentStatus.COMPLETED },
-        _count: true,
-        _sum: { priceCentsSnapshot: true },
-        orderBy: { _sum: { priceCentsSnapshot: 'desc' } },
-        take: 5,
-      }),
-      this.prisma.user.findMany({
-        where: { tenantId, deletedAt: null },
-        select: { id: true, name: true, commissionPercent: true },
-      }),
-      this.prisma.client.count({
-        where: { tenantId, deletedAt: null, createdAt: { gte: periodStart, lte: periodEnd } },
-      }),
-    ]);
+    const [byStatus, completedAgg, topServices, professionals, newClients, byProfessional] =
+      await Promise.all([
+        this.prisma.appointment.groupBy({
+          by: ['status'],
+          where: rangeWhere,
+          _count: true,
+        }),
+        this.prisma.appointment.aggregate({
+          where: { ...rangeWhere, status: AppointmentStatus.COMPLETED },
+          _sum: { priceCentsSnapshot: true },
+          _count: true,
+        }),
+        this.prisma.appointment.groupBy({
+          by: ['serviceId'],
+          where: { ...rangeWhere, status: AppointmentStatus.COMPLETED },
+          _count: true,
+          _sum: { priceCentsSnapshot: true },
+          orderBy: { _sum: { priceCentsSnapshot: 'desc' } },
+          take: 5,
+        }),
+        this.prisma.user.findMany({
+          where: { tenantId, deletedAt: null },
+          select: { id: true, name: true, commissionPercent: true },
+        }),
+        this.prisma.client.count({
+          where: { tenantId, deletedAt: null, createdAt: { gte: periodStart, lte: periodEnd } },
+        }),
+        this.prisma.appointment.groupBy({
+          by: ['professionalId'],
+          where: { ...rangeWhere, status: AppointmentStatus.COMPLETED },
+          _count: true,
+          _sum: { priceCentsSnapshot: true },
+        }),
+      ]);
 
     const statusCount = (status: AppointmentStatus) =>
       byStatus.find((s) => s.status === status)?._count ?? 0;
@@ -59,20 +66,14 @@ export class ReportsService {
     const finished = completed + noShow;
     const revenueCents = completedAgg._sum.priceCentsSnapshot ?? 0;
 
-    // Nomes dos serviços do top 5
     const serviceIds = topServices.map((s) => s.serviceId);
-    const services = await this.prisma.service.findMany({
-      where: { id: { in: serviceIds } },
-      select: { id: true, name: true },
-    });
-
-    // Receita e comissão por profissional
-    const byProfessional = await this.prisma.appointment.groupBy({
-      by: ['professionalId'],
-      where: { ...rangeWhere, status: AppointmentStatus.COMPLETED },
-      _count: true,
-      _sum: { priceCentsSnapshot: true },
-    });
+    const services =
+      serviceIds.length === 0
+        ? []
+        : await this.prisma.service.findMany({
+            where: { id: { in: serviceIds } },
+            select: { id: true, name: true },
+          });
 
     return {
       period: { from: periodStart.toISOString(), to: periodEnd.toISOString() },

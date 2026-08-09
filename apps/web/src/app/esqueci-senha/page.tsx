@@ -2,12 +2,13 @@
 
 import Link from 'next/link';
 import { FormEvent, useState } from 'react';
-import { BrandLogo } from '@/components/BrandLogo';
+import { AuthShell } from '@/components/AuthShell';
 import { Alert, Button, Field, Input } from '@/components/ui';
 import { api, ApiError } from '@/lib/api';
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState('');
+  const [tenantSlug, setTenantSlug] = useState('');
   const [sent, setSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -20,7 +21,10 @@ export default function ForgotPasswordPage() {
       await api('/api/auth/forgot-password', {
         method: 'POST',
         auth: false,
-        body: { email },
+        body: {
+          email,
+          ...(tenantSlug.trim() ? { tenantSlug: tenantSlug.trim().toLowerCase() } : {}),
+        },
       });
       setSent(true);
     } catch (err) {
@@ -31,53 +35,61 @@ export default function ForgotPasswordPage() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col bg-atmosphere">
-      <div className="px-6 py-6 sm:px-10">
-        <BrandLogo />
-      </div>
-      <main className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center px-6 pb-16">
-        <h1 className="font-display text-3xl font-semibold text-stone-900">Esqueci minha senha</h1>
-        <p className="mt-2 text-stone-600">
-          Informe o e-mail da sua conta e enviaremos um link de redefinição.
-        </p>
-
-        {sent ? (
-          <div className="mt-8 space-y-4">
-            <Alert tone="success">
-              Se o e-mail existir, enviamos um link de redefinição. Confira sua caixa de entrada e o
-              spam.
-            </Alert>
-            <Link href="/login" className="text-sm font-semibold text-emerald-800 hover:underline">
-              Voltar para o login
-            </Link>
-          </div>
-        ) : (
-          <form onSubmit={onSubmit} className="mt-8 space-y-4" noValidate>
-            {error ? <Alert>{error}</Alert> : null}
-            <Field label="E-mail" id="email">
-              <Input
-                id="email"
-                name="email"
-                type="email"
-                autoComplete="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-              />
-            </Field>
-            <Button type="submit" fullWidth disabled={loading || !email}>
-              {loading ? 'Enviando…' : 'Enviar link de redefinição'}
-            </Button>
-          </form>
-        )}
-
-        <p className="mt-6 text-sm text-stone-600">
+    <AuthShell
+      title="Esqueci minha senha"
+      description="Informe o e-mail da sua conta e enviaremos um link de redefinição."
+      footer={
+        <p className="text-sm text-[#6b736e]">
           Lembrou a senha?{' '}
-          <Link href="/login" className="font-semibold text-emerald-800 hover:underline">
+          <Link href="/login" className="font-semibold text-teal-800 hover:underline">
             Entrar
           </Link>
         </p>
-      </main>
-    </div>
+      }
+    >
+      {sent ? (
+        <div className="space-y-4">
+          <Alert tone="success">
+            Se o e-mail existir, enviamos um link de redefinição. Confira sua caixa de entrada e o
+            spam.
+          </Alert>
+          <Link href="/login" className="text-sm font-semibold text-teal-800 hover:underline">
+            Voltar para o login
+          </Link>
+        </div>
+      ) : (
+        <form onSubmit={onSubmit} className="space-y-4" noValidate>
+          {error ? <Alert>{error}</Alert> : null}
+          <Field label="E-mail" id="email">
+            <Input
+              id="email"
+              name="email"
+              type="email"
+              autoComplete="email"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+          </Field>
+          <Field
+            label="Slug do negócio (opcional)"
+            id="tenantSlug"
+            hint="Se o mesmo e-mail existir em mais de um negócio, informe o slug (ex.: studio-maria)."
+          >
+            <Input
+              id="tenantSlug"
+              name="tenantSlug"
+              autoComplete="organization"
+              placeholder="studio-maria"
+              value={tenantSlug}
+              onChange={(e) => setTenantSlug(e.target.value)}
+            />
+          </Field>
+          <Button type="submit" fullWidth loading={loading} disabled={!email}>
+            {loading ? 'Enviando…' : 'Enviar link de redefinição'}
+          </Button>
+        </form>
+      )}
+    </AuthShell>
   );
 }

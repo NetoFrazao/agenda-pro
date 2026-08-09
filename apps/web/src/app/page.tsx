@@ -4,53 +4,115 @@ import { SiteFooter, SiteHeader } from '@/components/SiteChrome';
 
 export default function HomePage() {
   return (
-    <div className="flex min-h-screen flex-col bg-atmosphere">
-      <SiteHeader />
-      <main className="relative flex flex-1 flex-col justify-center px-6 pb-20 pt-10 sm:px-10">
-        {/* Plano visual: textura sutil + marca dominante no primeiro viewport */}
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-x-0 top-0 -z-0 h-[70vh] overflow-hidden"
-        >
-          <div className="absolute -right-16 top-10 h-72 w-72 rounded-full bg-emerald-200/40 blur-3xl" />
-          <div className="absolute bottom-0 left-[-10%] h-64 w-[55%] bg-[url('data:image/svg+xml,%3Csvg width=%2760%27 height=%2760%27 viewBox=%270 0 60 60%27 xmlns=%27http://www.w3.org/2000/svg%27%3E%3Cg fill=%27none%27 fill-rule=%27evenodd%27%3E%3Cg fill=%27%23a8a29e%27 fill-opacity=%270.18%27%3E%3Cpath d=%27M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z%27/%3E%3C/g%3E%3C/g%3E%3C/svg%3E')] opacity-70" />
-        </div>
+    <div className="flex min-h-screen flex-col bg-ink-stage text-white">
+      <div className="pointer-events-none absolute inset-0 mesh-grid opacity-40" aria-hidden />
+      <SiteHeader tone="dark" />
 
-        <div className="relative z-10 mx-auto w-full max-w-4xl">
-          <BrandLogo
-            href={undefined}
-            size="hero"
-            className="block animate-[fadeUp_0.7s_ease-out]"
-          />
-          <h1 className="mt-8 max-w-2xl font-display text-3xl font-medium leading-tight tracking-tight text-stone-800 text-balance animate-[fadeUp_0.8s_ease-out] sm:text-4xl">
-            Sua agenda cheia, sem mensagens perdidas no WhatsApp.
-          </h1>
-          <p className="mt-5 max-w-xl text-lg text-stone-600 animate-[fadeUp_0.9s_ease-out]">
-            Página pública de agendamento e painel profissional para barbeiros e manicures.
-          </p>
-          <div className="mt-10 flex flex-wrap gap-3 animate-[fadeUp_1s_ease-out]">
-            <Link
-              href="/register"
-              className="rounded-md bg-emerald-700 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-800"
-            >
-              Começar grátis
-            </Link>
-            <Link
-              href="/login"
-              className="rounded-md bg-white px-5 py-3 text-sm font-semibold text-stone-800 ring-1 ring-stone-300 transition hover:bg-stone-50"
-            >
-              Entrar
-            </Link>
+      <main className="relative flex flex-1 flex-col">
+        {/* Hero: one composition — brand, one line, one support, CTAs, product stage */}
+        <section className="relative mx-auto grid w-full max-w-6xl flex-1 items-center gap-12 px-6 pb-16 pt-6 sm:px-10 lg:grid-cols-[1.05fr_0.95fr] lg:gap-10 lg:pb-24 lg:pt-10">
+          <div className="relative z-10">
+            <BrandLogo href={undefined} size="hero" tone="dark" className="block animate-fade-up" />
+            <h1 className="mt-8 max-w-xl font-display text-3xl font-semibold leading-[1.1] text-white text-balance animate-fade-up-delay-1 sm:text-4xl lg:text-[2.75rem]">
+              Sua cadeira cheia. Sem sumiço no WhatsApp.
+            </h1>
+            <p className="mt-5 max-w-md text-base leading-relaxed text-white/60 animate-fade-up-delay-2 sm:text-lg">
+              Link público de agendamento, lembrete automático e sinal no PIX — feito para barbeiros
+              e manicures.
+            </p>
+            <div className="mt-10 flex flex-wrap gap-3 animate-fade-up-delay-3">
+              <Link
+                href="/register"
+                className="rounded-2xl bg-mint px-6 py-3.5 text-sm font-semibold text-ink transition hover:bg-mint-glow"
+              >
+                Começar grátis
+              </Link>
+              <Link
+                href="/planos"
+                className="rounded-2xl px-6 py-3.5 text-sm font-semibold text-white/80 ring-1 ring-white/20 transition hover:bg-white/5 hover:text-white"
+              >
+                Ver planos
+              </Link>
+            </div>
           </div>
-        </div>
+
+          {/* Product visual anchor */}
+          <div className="relative animate-fade-up-delay-2">
+            <div
+              className="absolute -inset-6 rounded-[2rem] bg-gradient-to-br from-mint/20 via-transparent to-brass/15 blur-2xl"
+              aria-hidden
+            />
+            <div className="relative animate-float overflow-hidden rounded-[1.75rem] glass-dark p-5 shadow-[0_40px_100px_-40px_rgba(0,0,0,0.8)] sm:p-6">
+              <div className="mb-5 flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/40">
+                    Hoje
+                  </p>
+                  <p className="mt-1 font-display text-xl font-semibold text-white">
+                    Barbearia Norte
+                  </p>
+                </div>
+                <span className="rounded-full bg-mint/15 px-3 py-1 text-xs font-semibold text-mint-glow">
+                  8 horários
+                </span>
+              </div>
+
+              <div className="space-y-3">
+                {[
+                  { time: '09:30', name: 'João — Corte + barba', status: 'Confirmado' },
+                  { time: '10:15', name: 'Marina — Manicure', status: 'Aguardando' },
+                  { time: '11:00', name: 'Rafa — Degradê', status: 'Confirmado' },
+                ].map((row) => (
+                  <div
+                    key={row.time}
+                    className="flex items-center justify-between gap-3 rounded-2xl bg-white/[0.04] px-4 py-3 ring-1 ring-white/10"
+                  >
+                    <div>
+                      <p className="font-mono text-sm text-mint-glow">{row.time}</p>
+                      <p className="mt-0.5 text-sm text-white/85">{row.name}</p>
+                    </div>
+                    <span className="text-[11px] font-medium text-white/45">{row.status}</span>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-5 rounded-2xl bg-gradient-to-r from-mint/20 via-mint/5 to-transparent p-4 ring-1 ring-mint/25">
+                <p className="text-xs font-medium text-mint-glow">WhatsApp · lembrete 2h antes</p>
+                <p className="mt-1 text-sm text-white/70">
+                  “Oi João! Seu horário na Barbearia Norte é às 09:30. Confirme aqui →”
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* One job: why it wins for the niche */}
+        <section className="relative border-t border-white/10 bg-[#0b0d0c]/60">
+          <div className="mx-auto grid max-w-6xl gap-10 px-6 py-20 sm:px-10 md:grid-cols-3">
+            {[
+              {
+                title: 'Link no bio',
+                body: 'Cliente marca sozinho. Você para de responder “tem horário?” o dia inteiro.',
+              },
+              {
+                title: 'Lembrete no WhatsApp',
+                body: '24h e 2h antes. Menos falta, menos tempo perdido na cadeira vazia.',
+              },
+              {
+                title: 'Sinal no PIX',
+                body: 'QR e copia-e-cola no ato do agendamento. Quem reserva, aparece.',
+              },
+            ].map((item) => (
+              <div key={item.title}>
+                <h2 className="font-display text-xl font-semibold text-white">{item.title}</h2>
+                <p className="mt-3 text-sm leading-relaxed text-white/55">{item.body}</p>
+              </div>
+            ))}
+          </div>
+        </section>
       </main>
-      <SiteFooter />
-      <style>{`
-        @keyframes fadeUp {
-          from { opacity: 0; transform: translateY(12px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-      `}</style>
+
+      <SiteFooter tone="dark" />
     </div>
   );
 }

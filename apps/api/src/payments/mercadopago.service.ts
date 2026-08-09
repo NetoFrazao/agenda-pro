@@ -1,3 +1,4 @@
+import { createHmac, timingSafeEqual } from 'crypto';
 import { Injectable, Logger } from '@nestjs/common';
 import { EnvService } from '../config/env.service';
 
@@ -13,6 +14,7 @@ export type MercadoPagoPayment = {
   id: number;
   status: string;
   external_reference?: string;
+  transaction_amount?: number;
 };
 
 const MP_API = 'https://api.mercadopago.com';
@@ -32,6 +34,45 @@ export class MercadoPagoService {
     return Boolean(this.env.mercadoPagoAccessToken);
   }
 
+  /**
+   * Valida o header x-signature do webhook (template id:[data.id];request-id:...;ts:...;).
+   * Sem segredo configurado: em production rejeita; fora disso só loga aviso (dev).
+   */
+  verifyWebhookSignature(input: {
+    xSignature: string | undefined;
+    xRequestId: string | undefined;
+    dataId: string;
+  }): boolean {
+    const secret = this.env.mercadoPagoWebhookSecret;
+    if (!secret) {
+      if (this.env.nodeEnv === 'production') {
+        this.logger.error('MERCADOPAGO_WEBHOOK_SECRET ausente em produção — webhook rejeitado');
+        return false;
+      }
+      this.logger.warn('Webhook MP sem segredo configurado (aceito só em non-prod)');
+      return true;
+    }
+    if (!input.xSignature || !input.xRequestId) return false;
+
+    const parts = Object.fromEntries(
+      input.xSignature.split(',').map((p) => {
+        const [k, v] = p.split('=');
+        return [k?.trim(), v?.trim()];
+      }),
+    );
+    const ts = parts.ts;
+    const hash = parts.v1;
+    if (!ts || !hash) return false;
+
+    const manifest = `id:${input.dataId};request-id:${input.xRequestId};ts:${ts};`;
+    const expected = createHmac('sha256', secret).update(manifest).digest('hex');
+    try {
+      return timingSafeEqual(Buffer.from(expected, 'hex'), Buffer.from(hash, 'hex'));
+    } catch {
+      return false;
+    }
+  }
+
   async createPixCharge(input: {
     amountCents: number;
     description: string;
@@ -49,7 +90,6 @@ export class MercadoPagoService {
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${this.env.mercadoPagoAccessToken}`,
-        // Idempotência: retries do mesmo booking não geram cobrança duplicada
         'X-Idempotency-Key': input.externalReference,
       },
       body: JSON.stringify({

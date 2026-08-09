@@ -22,7 +22,11 @@
     "db:migrate:dev": "npm run prisma:migrate:dev -w @agenda-pro/api",
     "db:studio": "npm run prisma:studio -w @agenda-pro/api",
     "docker:up": "docker compose up -d",
-    "docker:down": "docker compose down"
+    "docker:down": "docker compose down",
+    "docker:prod:up": "docker compose -f docker-compose.prod.yml --env-file .env up -d --build",
+    "docker:prod:down": "docker compose -f docker-compose.prod.yml down",
+    "db:backup": "powershell -ExecutionPolicy Bypass -File ./scripts/backup-postgres.ps1",
+    "db:backup:dry": "powershell -ExecutionPolicy Bypass -File ./scripts/backup-postgres.ps1 -DryRun"
   },
   "engines": {
     "node": ">=20"

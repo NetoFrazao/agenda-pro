@@ -2,17 +2,28 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { Alert, EmptyState, PageTitle, Spinner } from '@/components/ui';
+import {
+  Alert,
+  Badge,
+  Button,
+  EmptyState,
+  PageSkeleton,
+  PageTitle,
+  StatCard,
+  StatusBadge,
+} from '@/components/ui';
 import { api, ApiError } from '@/lib/api';
-import { formatDateTime } from '@/lib/format';
-import type { Appointment, AuthUserPayload, Service } from '@/lib/types';
+import { formatBRL, formatDateTime } from '@/lib/format';
+import type { Appointment, AuthUserPayload, ReportsSummary, Service } from '@/lib/types';
 
 export default function DashboardOverviewPage() {
   const [me, setMe] = useState<AuthUserPayload | null>(null);
   const [services, setServices] = useState<Service[]>([]);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [summary, setSummary] = useState<ReportsSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -23,17 +34,21 @@ export default function DashboardOverviewPage() {
         const to = new Date(from);
         to.setDate(to.getDate() + 7);
 
-        const [meData, servicesData, appointmentsData] = await Promise.all([
+        const [meData, servicesData, appointmentsData, summaryData] = await Promise.all([
           api<AuthUserPayload>('/api/auth/me'),
           api<Service[]>('/api/services'),
-          api<Appointment[]>(
+          api<Appointment[] | { items: Appointment[] }>(
             `/api/appointments?from=${encodeURIComponent(from.toISOString())}&to=${encodeURIComponent(to.toISOString())}`,
           ),
+          api<ReportsSummary>('/api/reports/summary').catch(() => null),
         ]);
         if (cancelled) return;
         setMe(meData);
         setServices(Array.isArray(servicesData) ? servicesData : []);
-        setAppointments(Array.isArray(appointmentsData) ? appointmentsData : []);
+        setAppointments(
+          Array.isArray(appointmentsData) ? appointmentsData : (appointmentsData?.items ?? []),
+        );
+        setSummary(summaryData);
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof ApiError ? err.message : 'Falha ao carregar o painel.');
@@ -48,85 +63,131 @@ export default function DashboardOverviewPage() {
     };
   }, []);
 
-  if (loading) return <Spinner />;
+  if (loading) return <PageSkeleton />;
   if (error) return <Alert>{error}</Alert>;
 
   const publicUrl = me?.tenant?.slug ? `/u/${me.tenant.slug}` : null;
+  const origin = typeof window !== 'undefined' ? window.location.origin : '';
+  const shareLink = publicUrl && origin ? `${origin}${publicUrl}` : publicUrl;
+
   const upcoming = appointments
-    .filter((a) => a.status !== 'CANCELLED')
+    .filter((a) => a.status !== 'CANCELLED' && a.status !== 'NO_SHOW')
     .sort((a, b) => +new Date(a.startsAt) - +new Date(b.startsAt))
-    .slice(0, 5);
+    .slice(0, 6);
+
+  const todayKey = new Date().toDateString();
+  const todayCount = appointments.filter(
+    (a) => new Date(a.startsAt).toDateString() === todayKey && a.status !== 'CANCELLED',
+  ).length;
+
+  async function copyLink() {
+    if (!shareLink) return;
+    await navigator.clipboard.writeText(shareLink);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1800);
+  }
 
   return (
-    <div>
+    <div className="animate-fade-up">
       <PageTitle
         title={`Olá, ${me?.user?.name?.split(' ')[0] || 'profissional'}`}
-        description="Resumo da sua agenda e atalhos rápidos."
+        description={`${me?.tenant?.name || 'Seu negócio'} · o que importa agora`}
+        action={
+          publicUrl ? (
+            <div className="flex flex-wrap gap-2">
+              <Button variant="secondary" size="sm" onClick={copyLink}>
+                {copied ? 'Link copiado' : 'Copiar link público'}
+              </Button>
+              <Link href={publicUrl} target="_blank">
+                <Button variant="dark" size="sm">
+                  Ver página
+                </Button>
+              </Link>
+            </div>
+          ) : undefined
+        }
       />
 
-      <div className="grid gap-4 sm:grid-cols-3">
-        <div className="rounded-lg bg-white/80 p-5 ring-1 ring-stone-200">
-          <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">Negócio</p>
-          <p className="mt-2 font-display text-xl text-stone-900">{me?.tenant?.name}</p>
-          <p className="mt-1 text-sm text-stone-600">Plano {me?.tenant?.plan}</p>
-        </div>
-        <div className="rounded-lg bg-white/80 p-5 ring-1 ring-stone-200">
-          <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">Serviços</p>
-          <p className="mt-2 font-display text-3xl text-stone-900">{services.length}</p>
-          <Link
-            href="/dashboard/services"
-            className="mt-2 inline-block text-sm font-medium text-emerald-800 hover:underline"
-          >
-            Gerenciar
-          </Link>
-        </div>
-        <div className="rounded-lg bg-white/80 p-5 ring-1 ring-stone-200">
-          <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">
-            Próximos 7 dias
-          </p>
-          <p className="mt-2 font-display text-3xl text-stone-900">{upcoming.length}</p>
-          <Link
-            href="/dashboard/appointments"
-            className="mt-2 inline-block text-sm font-medium text-emerald-800 hover:underline"
-          >
-            Ver agenda
-          </Link>
-        </div>
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <StatCard accent label="Hoje" value={todayCount} hint="agendamentos ativos" />
+        <StatCard
+          label="Próximos 7 dias"
+          value={upcoming.length}
+          hint={
+            <Link
+              href="/dashboard/appointments"
+              className="font-medium text-mint-deep hover:underline"
+            >
+              Abrir agenda
+            </Link>
+          }
+        />
+        <StatCard
+          label="Faturamento do mês"
+          value={formatBRL(summary?.totals.revenueCents ?? 0)}
+          hint={`${summary?.totals.completed ?? 0} concluídos`}
+        />
+        <StatCard
+          label="Serviços ativos"
+          value={services.filter((s) => s.isActive !== false).length}
+          hint={
+            <Link href="/dashboard/services" className="font-medium text-mint-deep hover:underline">
+              Gerenciar
+            </Link>
+          }
+        />
       </div>
 
-      {publicUrl ? (
-        <p className="mt-6 text-sm text-stone-600">
-          Página pública:{' '}
-          <Link href={publicUrl} className="font-semibold text-emerald-800 hover:underline">
-            {publicUrl}
-          </Link>
-        </p>
+      {shareLink ? (
+        <div className="surface-elevated mt-6 flex flex-col gap-3 rounded-2xl p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted">
+              Seu link no bio / WhatsApp
+            </p>
+            <p className="mt-1 truncate font-mono text-sm text-ink">{shareLink}</p>
+          </div>
+          <Badge tone="emerald">Plano {me?.tenant?.plan}</Badge>
+        </div>
       ) : null}
 
       <section className="mt-10">
-        <h2 className="font-display text-xl font-semibold text-stone-900">Próximos agendamentos</h2>
-        <div className="mt-4">
-          {upcoming.length === 0 ? (
-            <EmptyState>Nenhum agendamento nos próximos 7 dias.</EmptyState>
-          ) : (
-            <ul className="divide-y divide-stone-200 overflow-hidden rounded-lg bg-white ring-1 ring-stone-200">
-              {upcoming.map((a) => (
-                <li
-                  key={a.id}
-                  className="flex flex-col gap-1 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
-                >
-                  <div>
-                    <p className="font-medium text-stone-900">{a.client?.name || 'Cliente'}</p>
-                    <p className="text-sm text-stone-600">{a.service?.name || 'Serviço'}</p>
-                  </div>
-                  <p className="text-sm text-stone-700">
-                    {formatDateTime(a.startsAt, me?.tenant?.timezone)}
-                  </p>
-                </li>
-              ))}
-            </ul>
-          )}
+        <div className="mb-4 flex items-end justify-between gap-3">
+          <h2 className="font-display text-xl font-semibold text-ink">Próximos atendimentos</h2>
+          <Link
+            href="/dashboard/appointments"
+            className="text-sm font-medium text-mint-deep hover:underline"
+          >
+            Ver todos
+          </Link>
         </div>
+        {upcoming.length === 0 ? (
+          <EmptyState title="Agenda livre">
+            Nenhum horário nos próximos 7 dias. Compartilhe seu link para encher a semana.
+          </EmptyState>
+        ) : (
+          <ul className="surface-elevated divide-y divide-paper-2 overflow-hidden rounded-2xl">
+            {upcoming.map((a) => (
+              <li
+                key={a.id}
+                className="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5"
+              >
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="font-semibold text-ink">{a.client?.name || 'Cliente'}</p>
+                    <StatusBadge status={a.status} />
+                  </div>
+                  <p className="mt-1 text-sm text-muted">
+                    {a.service?.name || 'Serviço'}
+                    {a.professional?.name ? ` · ${a.professional.name}` : ''}
+                  </p>
+                </div>
+                <p className="shrink-0 text-sm font-medium tabular-nums text-ink-soft">
+                  {formatDateTime(a.startsAt, me?.tenant?.timezone)}
+                </p>
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
     </div>
   );

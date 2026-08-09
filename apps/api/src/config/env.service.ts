@@ -58,6 +58,11 @@ export class EnvService {
     return this.config.get('STRIPE_SECRET_KEY', { infer: true });
   }
 
+  /** Demo de billing sem Stripe — nunca efetivo em production (ver BillingService). */
+  get allowBillingDemo() {
+    return this.config.get('ALLOW_BILLING_DEMO', { infer: true });
+  }
+
   get stripeWebhookSecret() {
     return this.config.get('STRIPE_WEBHOOK_SECRET', { infer: true });
   }
@@ -100,6 +105,10 @@ export class EnvService {
 
   get mercadoPagoAccessToken() {
     return this.config.get('MERCADOPAGO_ACCESS_TOKEN', { infer: true });
+  }
+
+  get mercadoPagoWebhookSecret() {
+    return this.config.get('MERCADOPAGO_WEBHOOK_SECRET', { infer: true });
   }
 
   /** Preços placeholder por plano (centavos). Não hardcodar no código de domínio. */

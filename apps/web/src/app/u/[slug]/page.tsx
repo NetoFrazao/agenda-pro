@@ -4,7 +4,17 @@ import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { BrandLogo } from '@/components/BrandLogo';
 import { CopyButton, PixBlock } from '@/components/pix';
-import { Alert, Button, EmptyState, Field, Input, Spinner, Stars, Textarea } from '@/components/ui';
+import {
+  Alert,
+  Badge,
+  Button,
+  EmptyState,
+  Field,
+  Input,
+  Spinner,
+  Stars,
+  Textarea,
+} from '@/components/ui';
 import { api, ApiError } from '@/lib/api';
 import { formatBRL, formatDate, formatTime, todayYmd, whatsappLink } from '@/lib/format';
 import type {
@@ -30,6 +40,100 @@ const STEP_LABELS: Record<StepId, string> = {
 
 /** 'any' = sem preferência (a API usa o dono da agenda). */
 type ProfessionalChoice = PublicProfessional | 'any' | null;
+
+function StepPills({
+  steps,
+}: {
+  steps: { id: StepId; label: string; n: number; current: boolean; complete: boolean }[];
+}) {
+  return (
+    <nav aria-label="Etapas do agendamento" className="sticky top-0 z-20 -mx-6 mb-8 px-6 py-4">
+      <div className="glass-panel rounded-2xl px-4 py-3 shadow-[0_8px_32px_-16px_rgba(14,17,16,0.2)]">
+        <ol className="flex flex-wrap gap-1.5">
+          {steps.map((s) => (
+            <li key={s.id}>
+              <span
+                className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold tracking-tight transition ${
+                  s.current
+                    ? 'bg-ink text-white shadow-[0_6px_16px_-8px_rgba(14,17,16,0.6)]'
+                    : s.complete
+                      ? 'bg-teal-100 text-teal-950'
+                      : 'bg-paper-2/80 text-muted'
+                }`}
+                aria-current={s.current ? 'step' : undefined}
+              >
+                <span
+                  className={`flex size-4 items-center justify-center rounded-md text-[10px] font-bold ${
+                    s.current
+                      ? 'bg-mint text-ink'
+                      : s.complete
+                        ? 'bg-mint-deep text-white'
+                        : 'bg-line text-muted'
+                  }`}
+                  aria-hidden
+                >
+                  {s.complete && !s.current ? '✓' : s.n}
+                </span>
+                <span className="hidden sm:inline">{s.label}</span>
+              </span>
+            </li>
+          ))}
+        </ol>
+      </div>
+    </nav>
+  );
+}
+
+function ServiceCard({ service, onSelect }: { service: Service; onSelect: () => void }) {
+  return (
+    <button
+      type="button"
+      className="surface-elevated group w-full rounded-2xl p-5 text-left transition hover:shadow-[0_24px_48px_-24px_rgba(14,17,16,0.4)] focus-visible:ring-2 focus-visible:ring-teal-700"
+      onClick={onSelect}
+    >
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0 flex-1">
+          <p className="font-display text-lg font-semibold text-ink">{service.name}</p>
+          {service.description ? (
+            <p className="mt-1.5 text-sm leading-relaxed text-[#6b736e]">{service.description}</p>
+          ) : null}
+          {service.depositCents ? (
+            <p className="mt-2 text-xs font-medium text-teal-800">
+              Sinal de {formatBRL(service.depositCents)}
+            </p>
+          ) : null}
+        </div>
+        <div className="shrink-0 text-right">
+          <p className="font-display text-xl font-semibold text-teal-800">
+            {formatBRL(service.priceCents)}
+          </p>
+          <Badge tone="stone">{service.durationMinutes} min</Badge>
+        </div>
+      </div>
+    </button>
+  );
+}
+
+function ChoiceCard({
+  title,
+  subtitle,
+  onSelect,
+}: {
+  title: string;
+  subtitle?: string;
+  onSelect: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      className="surface-elevated w-full rounded-2xl p-5 text-left transition hover:shadow-[0_24px_48px_-24px_rgba(14,17,16,0.35)] focus-visible:ring-2 focus-visible:ring-teal-700"
+      onClick={onSelect}
+    >
+      <p className="font-display text-lg font-semibold text-ink">{title}</p>
+      {subtitle ? <p className="mt-1 text-sm text-[#6b736e]">{subtitle}</p> : null}
+    </button>
+  );
+}
 
 export default function PublicBookingPage() {
   const params = useParams<{ slug: string }>();
@@ -233,35 +337,49 @@ export default function PublicBookingPage() {
 
   return (
     <div className="flex min-h-screen flex-col bg-atmosphere">
-      <header className="border-b border-stone-200/70 bg-white/50 px-6 py-5 backdrop-blur">
+      <header className="glass-panel border-b border-[#d5dbd6]/60 px-6 py-6">
         <div className="mx-auto max-w-2xl">
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <p className="font-display text-2xl font-semibold text-stone-900">{profile.name}</p>
-              <p className="text-sm text-stone-500">Agendamento online</p>
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              <p className="font-display text-2xl font-semibold tracking-tight text-ink sm:text-3xl">
+                {profile.name}
+              </p>
+              <p className="mt-1 text-sm text-[#6b736e]">Agendamento online</p>
             </div>
-            <BrandLogo href="/" size="sm" className="!text-base opacity-70" />
+            <BrandLogo href="/" size="sm" className="shrink-0 opacity-60" />
           </div>
+
           {profile.rating.count > 0 && profile.rating.average != null ? (
-            <p className="mt-3 flex items-center gap-2 text-sm text-stone-700">
+            <div className="mt-4 flex flex-wrap items-center gap-2">
               <Stars value={profile.rating.average} />
-              <span>
-                <strong>{profile.rating.average.toLocaleString('pt-BR')}</strong> (
-                {profile.rating.count} {profile.rating.count === 1 ? 'avaliação' : 'avaliações'})
+              <span className="text-sm text-[#3f4742]">
+                <strong className="font-semibold text-ink">
+                  {profile.rating.average.toLocaleString('pt-BR')}
+                </strong>{' '}
+                · {profile.rating.count} {profile.rating.count === 1 ? 'avaliação' : 'avaliações'}
               </span>
-            </p>
+            </div>
           ) : null}
+
           {profile.about ? (
-            <p className="mt-3 max-w-xl text-sm text-stone-600">{profile.about}</p>
+            <p className="mt-3 max-w-xl text-sm leading-relaxed text-[#6b736e]">{profile.about}</p>
           ) : null}
-          <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-sm text-stone-600">
-            {profile.address ? <span>{profile.address}</span> : null}
+
+          <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1.5 text-sm text-[#6b736e]">
+            {profile.address ? (
+              <span className="flex items-center gap-1.5">
+                <span aria-hidden className="text-teal-800">
+                  ●
+                </span>
+                {profile.address}
+              </span>
+            ) : null}
             {profile.whatsapp ? (
               <a
                 href={whatsappLink(profile.whatsapp)}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="font-semibold text-emerald-800 hover:underline"
+                className="font-semibold text-teal-800 transition hover:text-teal-900 hover:underline"
               >
                 WhatsApp
               </a>
@@ -271,26 +389,7 @@ export default function PublicBookingPage() {
       </header>
 
       <main className="mx-auto w-full max-w-2xl flex-1 px-6 py-8">
-        <nav aria-label="Etapas do agendamento" className="mb-8">
-          <ol className="flex flex-wrap gap-2">
-            {stepStatus.map((s) => (
-              <li key={s.id}>
-                <span
-                  className={`inline-flex items-center gap-2 rounded-md px-2.5 py-1 text-xs font-semibold ${
-                    s.current
-                      ? 'bg-emerald-700 text-white'
-                      : s.complete
-                        ? 'bg-emerald-100 text-emerald-900'
-                        : 'bg-stone-200/80 text-stone-600'
-                  }`}
-                  aria-current={s.current ? 'step' : undefined}
-                >
-                  <span aria-hidden>{s.n}.</span> {s.label}
-                </span>
-              </li>
-            ))}
-          </ol>
-        </nav>
+        {step !== 'done' ? <StepPills steps={stepStatus} /> : null}
 
         {error && step !== 'done' ? (
           <div className="mb-4">
@@ -299,33 +398,24 @@ export default function PublicBookingPage() {
         ) : null}
 
         {step === 'service' ? (
-          <section aria-labelledby="step-service">
-            <h1 id="step-service" className="font-display text-2xl font-semibold text-stone-900">
+          <section aria-labelledby="step-service" className="animate-fade-up">
+            <h1 id="step-service" className="font-display text-2xl font-semibold text-ink">
               Escolha o serviço
             </h1>
+            <p className="mt-2 text-sm text-[#6b736e]">Selecione o que deseja agendar.</p>
             <ul className="mt-6 space-y-3">
               {(profile.services || []).length === 0 ? (
                 <EmptyState>Nenhum serviço disponível no momento.</EmptyState>
               ) : (
                 profile.services.map((s) => (
                   <li key={s.id}>
-                    <button
-                      type="button"
-                      className="w-full rounded-lg bg-white p-4 text-left ring-1 ring-stone-200 transition hover:ring-emerald-600 focus-visible:ring-2 focus-visible:ring-emerald-700"
-                      onClick={() => {
+                    <ServiceCard
+                      service={s}
+                      onSelect={() => {
                         setService(s);
                         goToStepAfterService();
                       }}
-                    >
-                      <p className="font-semibold text-stone-900">{s.name}</p>
-                      <p className="mt-1 text-sm text-stone-600">
-                        {s.durationMinutes} min · {formatBRL(s.priceCents)}
-                        {s.depositCents ? ` · sinal de ${formatBRL(s.depositCents)}` : ''}
-                      </p>
-                      {s.description ? (
-                        <p className="mt-2 text-sm text-stone-500">{s.description}</p>
-                      ) : null}
-                    </button>
+                    />
                   </li>
                 ))
               )}
@@ -334,47 +424,36 @@ export default function PublicBookingPage() {
         ) : null}
 
         {step === 'professional' && service ? (
-          <section aria-labelledby="step-professional">
-            <h1
-              id="step-professional"
-              className="font-display text-2xl font-semibold text-stone-900"
-            >
+          <section aria-labelledby="step-professional" className="animate-fade-up">
+            <h1 id="step-professional" className="font-display text-2xl font-semibold text-ink">
               Escolha o profissional
             </h1>
-            <p className="mt-2 text-sm text-stone-600">
-              Serviço: <strong>{service.name}</strong>
+            <p className="mt-2 text-sm text-[#6b736e]">
+              Serviço: <strong className="text-ink">{service.name}</strong>
             </p>
             <ul className="mt-6 space-y-3">
               <li>
-                <button
-                  type="button"
-                  className="w-full rounded-lg bg-white p-4 text-left ring-1 ring-stone-200 transition hover:ring-emerald-600 focus-visible:ring-2 focus-visible:ring-emerald-700"
-                  onClick={() => {
+                <ChoiceCard
+                  title="Sem preferência"
+                  subtitle="Qualquer profissional disponível"
+                  onSelect={() => {
                     setProfessional('any');
                     setSlot(null);
                     setStep('date');
                   }}
-                >
-                  <p className="font-semibold text-stone-900">Sem preferência</p>
-                  <p className="mt-1 text-sm text-stone-600">Qualquer profissional disponível</p>
-                </button>
+                />
               </li>
               {professionals.map((p) => (
                 <li key={p.id}>
-                  <button
-                    type="button"
-                    className="w-full rounded-lg bg-white p-4 text-left ring-1 ring-stone-200 transition hover:ring-emerald-600 focus-visible:ring-2 focus-visible:ring-emerald-700"
-                    onClick={() => {
+                  <ChoiceCard
+                    title={p.name}
+                    subtitle={p.role === 'OWNER' ? 'Responsável' : undefined}
+                    onSelect={() => {
                       setProfessional(p);
                       setSlot(null);
                       setStep('date');
                     }}
-                  >
-                    <p className="font-semibold text-stone-900">{p.name}</p>
-                    {p.role === 'OWNER' ? (
-                      <p className="mt-1 text-sm text-stone-600">Responsável</p>
-                    ) : null}
-                  </button>
+                  />
                 </li>
               ))}
             </ul>
@@ -387,20 +466,20 @@ export default function PublicBookingPage() {
         ) : null}
 
         {step === 'date' && service ? (
-          <section aria-labelledby="step-day">
-            <h1 id="step-day" className="font-display text-2xl font-semibold text-stone-900">
+          <section aria-labelledby="step-day" className="animate-fade-up">
+            <h1 id="step-day" className="font-display text-2xl font-semibold text-ink">
               Escolha o dia
             </h1>
-            <p className="mt-2 text-sm text-stone-600">
-              Serviço: <strong>{service.name}</strong>
+            <p className="mt-2 text-sm text-[#6b736e]">
+              Serviço: <strong className="text-ink">{service.name}</strong>
               {professionalLabel ? (
                 <>
                   {' '}
-                  · Profissional: <strong>{professionalLabel}</strong>
+                  · Profissional: <strong className="text-ink">{professionalLabel}</strong>
                 </>
               ) : null}
             </p>
-            <div className="mt-6 max-w-xs">
+            <div className="surface-elevated mt-6 max-w-xs rounded-2xl p-5">
               <Field label="Data" id="booking-date">
                 <Input
                   id="booking-date"
@@ -438,30 +517,30 @@ export default function PublicBookingPage() {
         ) : null}
 
         {step === 'time' && service ? (
-          <section aria-labelledby="step-slot">
-            <h1 id="step-slot" className="font-display text-2xl font-semibold text-stone-900">
+          <section aria-labelledby="step-slot" className="animate-fade-up">
+            <h1 id="step-slot" className="font-display text-2xl font-semibold text-ink">
               Escolha o horário
             </h1>
-            <p className="mt-2 text-sm text-stone-600">{formatDate(date, timezone)}</p>
+            <p className="mt-2 text-sm text-[#6b736e]">{formatDate(date, timezone)}</p>
             {slotsLoading ? (
               <div className="mt-6">
                 <Spinner label="Buscando horários…" />
               </div>
             ) : slots.length === 0 ? (
               <div className="mt-6 space-y-5">
-                <EmptyState>Nenhum horário livre neste dia.</EmptyState>
+                <EmptyState>
+                  <p className="font-medium text-ink">Nenhum horário livre neste dia.</p>
+                  <p className="mt-1">Entre na lista de espera e avisaremos se abrir vaga.</p>
+                </EmptyState>
                 <section
                   aria-labelledby="waitlist-title"
-                  className="rounded-lg bg-white p-5 ring-1 ring-stone-200"
+                  className="surface-elevated rounded-2xl p-6"
                 >
-                  <h2
-                    id="waitlist-title"
-                    className="font-display text-lg font-semibold text-stone-900"
-                  >
+                  <h2 id="waitlist-title" className="font-display text-lg font-semibold text-ink">
                     Avise-me se abrir vaga
                   </h2>
                   {wlResult ? (
-                    <div className="mt-3">
+                    <div className="mt-4">
                       <Alert tone="success">
                         {wlResult === 'already'
                           ? 'Você já está na lista de espera deste dia. Vamos te avisar se abrir vaga.'
@@ -469,10 +548,10 @@ export default function PublicBookingPage() {
                       </Alert>
                     </div>
                   ) : (
-                    <form onSubmit={joinWaitlist} className="mt-4 space-y-4" noValidate>
-                      <p className="text-sm text-stone-600">
+                    <form onSubmit={joinWaitlist} className="mt-5 space-y-4" noValidate>
+                      <p className="text-sm text-[#6b736e]">
                         Deixe seu contato e avisaremos caso algum horário abra em{' '}
-                        <strong>{formatDate(date, timezone)}</strong>.
+                        <strong className="text-ink">{formatDate(date, timezone)}</strong>.
                       </p>
                       <Field label="Nome" id="wl-name">
                         <Input
@@ -523,11 +602,8 @@ export default function PublicBookingPage() {
                         type="button"
                         role="option"
                         aria-selected={selected}
-                        className={`w-full rounded-md px-2 py-2.5 text-sm font-semibold ring-1 transition ${
-                          selected
-                            ? 'bg-emerald-700 text-white ring-emerald-700'
-                            : 'bg-white text-stone-800 ring-stone-300 hover:ring-emerald-600'
-                        }`}
+                        data-selected={selected}
+                        className="slot-chip w-full rounded-xl bg-white px-2 py-2.5 text-sm font-semibold text-ink ring-1 ring-[#d5dbd6] hover:ring-teal-700/40"
                         onClick={() => setSlot(iso)}
                       >
                         {formatTime(iso, timezone)}
@@ -549,16 +625,20 @@ export default function PublicBookingPage() {
         ) : null}
 
         {step === 'details' && service && slot ? (
-          <section aria-labelledby="step-form">
-            <h1 id="step-form" className="font-display text-2xl font-semibold text-stone-900">
+          <section aria-labelledby="step-form" className="animate-fade-up">
+            <h1 id="step-form" className="font-display text-2xl font-semibold text-ink">
               Seus dados
             </h1>
-            <p className="mt-2 text-sm text-stone-600">
+            <p className="mt-2 text-sm text-[#6b736e]">
               {service.name}
               {professionalLabel ? ` · ${professionalLabel}` : ''} · {formatDate(date, timezone)} ·{' '}
               {formatTime(slot, timezone)}
             </p>
-            <form onSubmit={submitBooking} className="mt-6 space-y-4" noValidate>
+            <form
+              onSubmit={submitBooking}
+              className="surface-elevated mt-6 space-y-4 rounded-2xl p-6"
+              noValidate
+            >
               <Field label="Nome completo" id="clientName">
                 <Input
                   id="clientName"
@@ -608,10 +688,22 @@ export default function PublicBookingPage() {
         ) : null}
 
         {step === 'done' && bookResult ? (
-          <section aria-labelledby="step-done" aria-live="polite" className="space-y-5">
-            <h1 id="step-done" className="font-display text-2xl font-semibold text-stone-900">
-              {bookResult.pix ? 'Quase lá: pague o sinal' : 'Agendamento confirmado'}
-            </h1>
+          <section
+            aria-labelledby="step-done"
+            aria-live="polite"
+            className="animate-fade-up space-y-5"
+          >
+            <div className="text-center sm:text-left">
+              <span className="inline-flex size-12 items-center justify-center rounded-2xl bg-teal-100 text-2xl text-teal-800">
+                ✓
+              </span>
+              <h1
+                id="step-done"
+                className="mt-4 font-display text-2xl font-semibold text-ink sm:text-3xl"
+              >
+                {bookResult.pix ? 'Quase lá: pague o sinal' : 'Agendamento confirmado'}
+              </h1>
+            </div>
 
             {bookResult.pix ? (
               <Alert tone="info">
@@ -625,26 +717,34 @@ export default function PublicBookingPage() {
               </Alert>
             )}
 
-            <dl className="space-y-3 rounded-lg bg-white p-5 text-sm ring-1 ring-stone-200">
+            <dl className="surface-elevated space-y-4 rounded-2xl p-6 text-sm">
               <div>
-                <dt className="text-stone-500">Serviço</dt>
-                <dd className="font-medium text-stone-900">{service?.name}</dd>
+                <dt className="text-xs font-semibold uppercase tracking-wide text-[#6b736e]">
+                  Serviço
+                </dt>
+                <dd className="mt-1 font-medium text-ink">{service?.name}</dd>
               </div>
               {professionalLabel ? (
                 <div>
-                  <dt className="text-stone-500">Profissional</dt>
-                  <dd className="font-medium text-stone-900">{professionalLabel}</dd>
+                  <dt className="text-xs font-semibold uppercase tracking-wide text-[#6b736e]">
+                    Profissional
+                  </dt>
+                  <dd className="mt-1 font-medium text-ink">{professionalLabel}</dd>
                 </div>
               ) : null}
               <div>
-                <dt className="text-stone-500">Quando</dt>
-                <dd className="font-medium text-stone-900">
+                <dt className="text-xs font-semibold uppercase tracking-wide text-[#6b736e]">
+                  Quando
+                </dt>
+                <dd className="mt-1 font-medium text-ink">
                   {slot ? `${formatDate(date, timezone)} às ${formatTime(slot, timezone)}` : '—'}
                 </dd>
               </div>
               <div>
-                <dt className="text-stone-500">Cliente</dt>
-                <dd className="font-medium text-stone-900">{clientName}</dd>
+                <dt className="text-xs font-semibold uppercase tracking-wide text-[#6b736e]">
+                  Cliente
+                </dt>
+                <dd className="mt-1 font-medium text-ink">{clientName}</dd>
               </div>
             </dl>
 
@@ -665,17 +765,17 @@ export default function PublicBookingPage() {
               </Alert>
             ) : null}
 
-            <div className="rounded-lg bg-white p-5 ring-1 ring-stone-200">
-              <h2 className="font-display text-lg font-semibold text-stone-900">
+            <div className="surface-elevated rounded-2xl p-6">
+              <h2 className="font-display text-lg font-semibold text-ink">
                 Gerencie seu agendamento
               </h2>
-              <p className="mt-1 text-sm text-stone-600">
+              <p className="mt-1 text-sm text-[#6b736e]">
                 Use este link para confirmar presença, remarcar ou cancelar.
               </p>
-              <div className="mt-3 flex flex-wrap items-center gap-3">
+              <div className="mt-4 flex flex-wrap items-center gap-3">
                 <a
                   href={bookResult.manageUrl}
-                  className="break-all text-sm font-semibold text-emerald-800 hover:underline"
+                  className="break-all text-sm font-semibold text-teal-800 hover:underline"
                 >
                   Gerenciar meu agendamento
                 </a>
@@ -686,19 +786,24 @@ export default function PublicBookingPage() {
         ) : null}
 
         {(profile.reviews || []).length > 0 ? (
-          <section aria-labelledby="reviews-title" className="mt-14">
-            <h2 id="reviews-title" className="font-display text-xl font-semibold text-stone-900">
+          <section
+            aria-labelledby="reviews-title"
+            className="mt-14 border-t border-[#d5dbd6]/80 pt-10"
+          >
+            <h2 id="reviews-title" className="font-display text-xl font-semibold text-ink">
               Avaliações recentes
             </h2>
-            <ul className="mt-4 space-y-3">
+            <ul className="mt-5 space-y-3">
               {profile.reviews.map((r, i) => (
-                <li key={i} className="rounded-lg bg-white p-4 ring-1 ring-stone-200">
+                <li key={i} className="surface-elevated rounded-2xl p-5">
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="font-semibold text-stone-900">{r.clientName || 'Cliente'}</p>
+                    <p className="font-semibold text-ink">{r.clientName || 'Cliente'}</p>
                     <Stars value={r.rating} />
                   </div>
-                  {r.comment ? <p className="mt-2 text-sm text-stone-700">{r.comment}</p> : null}
-                  <p className="mt-2 text-xs text-stone-500">{formatDate(r.createdAt, timezone)}</p>
+                  {r.comment ? (
+                    <p className="mt-2 text-sm leading-relaxed text-[#3f4742]">{r.comment}</p>
+                  ) : null}
+                  <p className="mt-2 text-xs text-[#6b736e]">{formatDate(r.createdAt, timezone)}</p>
                 </li>
               ))}
             </ul>

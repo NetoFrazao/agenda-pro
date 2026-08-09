@@ -58,16 +58,17 @@ model Tenant {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  users         User[]
-  services      Service[]
-  availability  AvailabilityRule[]
-  exceptions    AvailabilityException[]
-  clients       Client[]
-  appointments  Appointment[]
-  subscription  Subscription?
-  waitlist      WaitlistEntry[]
-  reviews       Review[]
-  pixCharges    PixCharge[]
+  users                User[]
+  services             Service[]
+  availability         AvailabilityRule[]
+  exceptions           AvailabilityException[]
+  clients              Client[]
+  appointments         Appointment[]
+  subscription         Subscription?
+  waitlist             WaitlistEntry[]
+  reviews              Review[]
+  pixCharges           PixCharge[]
+  loyaltyTransactions  LoyaltyTransaction[]
 
   @@map("tenants")
 }
@@ -166,6 +167,8 @@ model Service {
   appointments Appointment[]
 
   @@index([tenantId, isActive])
+  /// Listagens dashboard / book: tenant + soft-delete
+  @@index([tenantId, deletedAt])
   @@map("services")
 }
 
@@ -225,20 +228,56 @@ model Client {
   email     String?   @db.VarChar(255)
   phone     String    @db.VarChar(32)
   notes     String?   @db.Text
+  /// Tags livres do CRM (ex: "vip-manual", "indicação")
+  tags      String[]  @default([])
+  /// Aniversário (só dia/mês civil; ano opcional / placeholder)
+  birthday  DateTime? @db.Date
   /// Consentimento para lembretes (WhatsApp/e-mail)
   marketingOptIn Boolean @default(false)
-  /// Pontos de fidelidade acumulados (atendimentos concluídos)
+  /// Pontos de fidelidade acumulados (saldo denormalizado; ledger em LoyaltyTransaction)
   loyaltyPoints  Int     @default(0)
   deletedAt DateTime?
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 
-  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  appointments Appointment[]
+  tenant              Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  appointments        Appointment[]
+  loyaltyTransactions LoyaltyTransaction[]
 
   @@index([tenantId, phone])
   @@index([tenantId, email])
+  /// CRM list: sempre filtra soft-delete
+  @@index([tenantId, deletedAt])
   @@map("clients")
+}
+
+enum LoyaltyTxnType {
+  CREDIT
+  DEBIT
+}
+
+/// Ledger de fidelidade — impede crédito duplicado por appointment (unique appointmentId+CREDIT).
+model LoyaltyTransaction {
+  id            String         @id @default(cuid())
+  tenantId      String
+  clientId      String
+  /// Presente em crédito por atendimento concluído (idempotência)
+  appointmentId String?
+  type          LoyaltyTxnType
+  points        Int
+  /// COMPLETED_VISIT | REDEEM | ADJUSTMENT | MIGRATION
+  reason        String         @db.VarChar(64)
+  /// Referência livre (cupom, operador, etc.)
+  ref           String?        @db.VarChar(120)
+  createdAt     DateTime       @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@unique([appointmentId, type])
+  @@index([tenantId, clientId, createdAt])
+  @@index([tenantId, createdAt])
+  @@map("loyalty_transactions")
 }
 
 enum AppointmentStatus {
@@ -281,8 +320,14 @@ model Appointment {
   pixCharge    PixCharge?
 
   @@index([tenantId, startsAt])
+  /// Reports (groupBy status + range) e listagens filtradas por status
+  @@index([tenantId, status, startsAt])
+  /// PIX lifecycle: órfãos PENDING_PAYMENT por idade (sem tenant na query de reconciliação)
+  @@index([status, createdAt])
   @@index([professionalId, startsAt])
   @@index([clientId])
+  /// CRM metrics: groupBy clientId + status (page-scoped / segment rank)
+  @@index([tenantId, clientId, status, startsAt])
   /// Impede dois bookings exatamente no mesmo start para o mesmo profissional
   /// (camada 1). Overlap parcial é tratado com transaction + lock na Fase 3.
   @@unique([professionalId, startsAt])
@@ -387,6 +432,7 @@ enum PixChargeStatus {
   PAID
   EXPIRED
   CANCELLED
+  REFUNDED
 }
 
 /// Cobrança PIX de sinal (Mercado Pago). 1:1 com o agendamento.
@@ -412,6 +458,8 @@ model PixCharge {
   appointment Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
 
   @@index([tenantId, status])
+  /// PIX lifecycle reconcileExpired: status=PENDING AND expiresAt <= now
+  @@index([status, expiresAt])
   @@map("pix_charges")
 }
 

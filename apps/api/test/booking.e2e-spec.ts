@@ -9,6 +9,20 @@ import * as request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 
+function cookieValue(res: request.Response, name: string): string | undefined {
+  const raw = res.headers['set-cookie'];
+  if (!raw) return undefined;
+  const list = Array.isArray(raw) ? raw : [raw];
+  for (const entry of list) {
+    const part = entry.split(';')[0];
+    const eq = part.indexOf('=');
+    if (eq > 0 && part.slice(0, eq) === name) {
+      return part.slice(eq + 1);
+    }
+  }
+  return undefined;
+}
+
 describe('Booking público — concorrência (e2e)', () => {
   let app: INestApplication;
   let prisma: PrismaService;
@@ -51,7 +65,9 @@ describe('Booking público — concorrência (e2e)', () => {
       })
       .expect(201);
 
-    accessToken = register.body.accessToken;
+    accessToken = cookieValue(register, 'ap_access') ?? '';
+    expect(accessToken).toBeTruthy();
+    expect(register.body.accessToken).toBeUndefined();
     tenantId = register.body.tenant.id;
 
     const service = await request(app.getHttpServer())
@@ -102,6 +118,7 @@ describe('Booking público — concorrência (e2e)', () => {
 
     const winner = first.status === 201 ? first : second;
     expect(winner.body.manageUrl).toContain('/agendamento/');
+    expect(winner.body.manageToken).toBeUndefined();
 
     const count = await prisma.appointment.count({
       where: { tenantId, startsAt: new Date(startsAt) },
@@ -127,7 +144,9 @@ describe('Booking público — concorrência (e2e)', () => {
       })
       .expect(201);
 
-    const token = booked.body.manageToken;
+    expect(booked.body.manageToken).toBeUndefined();
+    const token = String(booked.body.manageUrl).split('/').pop();
+    expect(token).toBeTruthy();
 
     const detail = await request(app.getHttpServer())
       .get(`/api/public/appointments/${token}`)
@@ -149,5 +168,120 @@ describe('Booking público — concorrência (e2e)', () => {
 
     const cancelled = await prisma.appointment.findUnique({ where: { manageToken: token } });
     expect(cancelled?.status).toBe('CANCELLED');
+  });
+
+  it('isolamento cross-tenant: tenant B não lê/altera cliente nem serviço de A', async () => {
+    const runB = `e2e-b-${Date.now()}`;
+    const slugB = `barbearia-${runB}`;
+    const registerB = await request(app.getHttpServer())
+      .post('/api/auth/register')
+      .send({
+        name: 'Tester B',
+        email: `${runB}@e2e.local`,
+        password: 'SenhaForte123!',
+        businessName: `Barbearia ${runB}`,
+        slug: slugB,
+      })
+      .expect(201);
+    const tokenB = cookieValue(registerB, 'ap_access') ?? '';
+    const tenantBId = registerB.body.tenant.id;
+
+    try {
+      const clientA = await prisma.client.create({
+        data: {
+          tenantId,
+          name: 'Cliente Tenant A',
+          phone: '11988887777',
+        },
+      });
+
+      await request(app.getHttpServer())
+        .get(`/api/clients/${clientA.id}`)
+        .set('Authorization', `Bearer ${tokenB}`)
+        .expect(404);
+
+      await request(app.getHttpServer())
+        .patch(`/api/services/${serviceId}`)
+        .set('Authorization', `Bearer ${tokenB}`)
+        .send({ name: 'Hijack' })
+        .expect(404);
+
+      const untouched = await prisma.service.findUnique({ where: { id: serviceId } });
+      expect(untouched?.name).toBe('Corte E2E');
+    } finally {
+      await prisma.tenant.delete({ where: { id: tenantBId } }).catch(() => undefined);
+    }
+  });
+
+  it('stress controlado: várias requests no mesmo slot → exatamente 1 sucesso', async () => {
+    const date = nextBusinessDay();
+    const slotsRes = await request(app.getHttpServer())
+      .get(`/api/public/${slug}/slots`)
+      .query({ serviceId, date })
+      .expect(200);
+    // Slot distinto do teste de 2-way race (índice 0)
+    const startsAt = slotsRes.body.slots[2] ?? slotsRes.body.slots[0];
+    expect(startsAt).toBeTruthy();
+
+    // Throttle do book é 10/min — stress cabe no orçamento restante do suite
+    const CONCURRENCY = 6;
+    const results = await Promise.all(
+      Array.from({ length: CONCURRENCY }, (_, i) =>
+        request(app.getHttpServer())
+          .post(`/api/public/${slug}/book`)
+          .send({
+            serviceId,
+            startsAt,
+            clientName: `Stress ${i}`,
+            clientPhone: `11977${String(i).padStart(6, '0')}`,
+          }),
+      ),
+    );
+
+    const ok = results.filter((r) => r.status === 201);
+    const rejected = results.filter((r) => r.status === 409 || r.status === 429);
+    expect(ok).toHaveLength(1);
+    expect(rejected.length).toBe(CONCURRENCY - 1);
+
+    const count = await prisma.appointment.count({
+      where: { tenantId, startsAt: new Date(startsAt) },
+    });
+    expect(count).toBe(1);
+  });
+
+  it('FSM: dashboard rejeita CANCELLED→COMPLETED', async () => {
+    const owner = await prisma.user.findFirst({
+      where: { tenantId, role: 'OWNER' },
+    });
+    expect(owner).toBeTruthy();
+
+    const client = await prisma.client.create({
+      data: { tenantId, name: 'FSM Client', phone: '11966665555' },
+    });
+    const appt = await prisma.appointment.create({
+      data: {
+        tenantId,
+        professionalId: owner!.id,
+        clientId: client.id,
+        serviceId,
+        startsAt: new Date(Date.now() + 7 * 86_400_000),
+        endsAt: new Date(Date.now() + 7 * 86_400_000 + 30 * 60_000),
+        status: 'SCHEDULED',
+        priceCentsSnapshot: 5000,
+        durationMinutesSnapshot: 30,
+      },
+    });
+
+    await request(app.getHttpServer())
+      .patch(`/api/appointments/${appt.id}/status`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({ status: 'CANCELLED' })
+      .expect(200);
+
+    await request(app.getHttpServer())
+      .patch(`/api/appointments/${appt.id}/status`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({ status: 'COMPLETED' })
+      .expect(400);
   });
 });

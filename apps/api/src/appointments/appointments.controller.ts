@@ -14,7 +14,13 @@ export class AppointmentsController {
 
   @Get()
   list(@CurrentUser() user: AuthUser, @Query() query: ListAppointmentsQueryDto) {
-    return this.appointments.list(user.tenantId, query.from, query.to, query.professionalId);
+    return this.appointments.list(user.tenantId, {
+      from: query.from,
+      to: query.to,
+      professionalId: query.professionalId,
+      page: query.page,
+      pageSize: query.pageSize,
+    });
   }
 
   @Patch(':id/status')
