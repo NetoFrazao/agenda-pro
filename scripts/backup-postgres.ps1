@@ -8,7 +8,10 @@ param(
   [switch]$DryRun,
   [string]$ComposeFile = 'docker-compose.yml',
   [string]$Service = 'postgres',
-  [string]$OutDir = 'backups'
+  [string]$OutDir = 'backups',
+  # Cópia off-host: diretório local montado (ex. sync Drive) ou path de rede.
+  # Alternativa: $env:BACKUP_OFFHOST_DIR
+  [string]$OffHostDir = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -18,12 +21,17 @@ $user = if ($env:POSTGRES_USER) { $env:POSTGRES_USER } else { 'agenda' }
 $db = if ($env:POSTGRES_DB) { $env:POSTGRES_DB } else { 'agenda_pro' }
 $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
 $outFile = Join-Path $OutDir "agenda-pro-$stamp.sql"
+$offHost = if ($OffHostDir) { $OffHostDir } elseif ($env:BACKUP_OFFHOST_DIR) { $env:BACKUP_OFFHOST_DIR } else { '' }
 
 Write-Host "==> Compose: $ComposeFile  service: $Service  db: $db"
 Write-Host "==> Destino: $outFile"
+if ($offHost) { Write-Host "==> Off-host: $offHost" }
 
 if ($DryRun) {
   Write-Host "[dry-run] docker compose -f $ComposeFile exec -T $Service pg_dump -U $user -d $db --no-owner --format=plain > $outFile"
+  if ($offHost) {
+    Write-Host "[dry-run] Copy-Item $outFile $offHost"
+  }
   Write-Host '[dry-run] nenhum arquivo escrito.'
   exit 0
 }
@@ -42,4 +50,17 @@ if ($LASTEXITCODE -ne 0) {
 
 $size = (Get-Item $outFile).Length
 Write-Host "OK backup: $outFile ($size bytes)"
+
+if ($offHost) {
+  if (-not (Test-Path $offHost)) {
+    New-Item -ItemType Directory -Path $offHost -Force | Out-Null
+  }
+  $dest = Join-Path $offHost (Split-Path $outFile -Leaf)
+  Copy-Item -Path $outFile -Destination $dest -Force
+  Write-Host "OK off-host: $dest"
+} else {
+  Write-Host 'Aviso: BACKUP_OFFHOST_DIR não definido — cópia off-host não feita (RPO local only).'
+}
+
 Write-Host 'Restore: .\scripts\restore-postgres.ps1 -DumpFile <arquivo> -DryRun'
+Write-Host 'Drill: .\scripts\restore-drill.ps1 -DumpFile <arquivo>'

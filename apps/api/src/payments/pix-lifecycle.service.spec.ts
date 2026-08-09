@@ -35,7 +35,13 @@ describe('PixLifecycleService — C-02 release PENDING_PAYMENT', () => {
     };
     const notifications = { enqueueWaitlistSlotOpen: jest.fn() };
 
-    const service = new PixLifecycleService(prisma as never, notifications as never);
+    const service = new PixLifecycleService(
+      prisma as never,
+      notifications as never,
+      {
+        runsBackgroundJobs: true,
+      } as never,
+    );
     const released = await service.releasePendingPayment('appt-1', 'PIX expirado');
 
     expect(released).toBe(true);
@@ -44,13 +50,13 @@ describe('PixLifecycleService — C-02 release PENDING_PAYMENT', () => {
       data: { status: PixChargeStatus.EXPIRED },
     });
     expect(appointmentUpdateMany).toHaveBeenCalledWith({
-      where: { id: 'appt-1', status: AppointmentStatus.PENDING_PAYMENT },
+      where: { id: 'appt-1', status: { in: [AppointmentStatus.PENDING_PAYMENT] } },
       data: expect.objectContaining({ status: AppointmentStatus.CANCELLED }),
     });
     expect(notifications.enqueueWaitlistSlotOpen).not.toHaveBeenCalled();
   });
 
-  it('não altera appointment já confirmado', async () => {
+  it('não altera appointment já confirmado com charge PAID', async () => {
     const prisma = {
       appointment: {
         findUnique: jest.fn().mockResolvedValue({
@@ -67,11 +73,50 @@ describe('PixLifecycleService — C-02 release PENDING_PAYMENT', () => {
       {
         enqueueWaitlistSlotOpen: jest.fn(),
       } as never,
+      { runsBackgroundJobs: true } as never,
     );
 
     const released = await service.releasePendingPayment('appt-1', 'noop');
     expect(released).toBe(false);
     expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('cancela CONFIRMED com charge ainda PENDING (recuperação de bypass)', async () => {
+    const appt = {
+      id: 'appt-bypass',
+      tenantId: 't1',
+      status: AppointmentStatus.CONFIRMED,
+      startsAt: new Date('2026-08-10T15:00:00.000Z'),
+      tenant: { id: 't1', name: 'Demo', slug: 'demo', timezone: 'America/Sao_Paulo' },
+      pixCharge: { id: 'ch-1', status: PixChargeStatus.PENDING },
+    };
+    const pixChargeUpdateMany = jest.fn().mockResolvedValue({ count: 1 });
+    const appointmentUpdateMany = jest.fn().mockResolvedValue({ count: 1 });
+    const prisma = {
+      appointment: { findUnique: jest.fn().mockResolvedValue(appt) },
+      $transaction: jest.fn(async (fn: (tx: unknown) => Promise<unknown>) =>
+        fn({
+          pixCharge: { updateMany: pixChargeUpdateMany },
+          appointment: { updateMany: appointmentUpdateMany },
+          waitlistEntry: {
+            findFirst: jest.fn().mockResolvedValue(null),
+            updateMany: jest.fn(),
+          },
+        }),
+      ),
+    };
+    const service = new PixLifecycleService(
+      prisma as never,
+      { enqueueWaitlistSlotOpen: jest.fn() } as never,
+      { runsBackgroundJobs: true } as never,
+    );
+
+    const released = await service.releasePendingPayment('appt-bypass', 'PIX expirado');
+    expect(released).toBe(true);
+    expect(appointmentUpdateMany).toHaveBeenCalledWith({
+      where: { id: 'appt-bypass', status: { in: [AppointmentStatus.CONFIRMED] } },
+      data: expect.objectContaining({ status: AppointmentStatus.CANCELLED }),
+    });
   });
 });
 
@@ -95,7 +140,13 @@ describe('PixLifecycleService — webhook idempotency (confirmPaid)', () => {
       }),
     };
     const notifications = { enqueueBookingConfirmation };
-    const service = new PixLifecycleService(prisma as never, notifications as never);
+    const service = new PixLifecycleService(
+      prisma as never,
+      notifications as never,
+      {
+        runsBackgroundJobs: true,
+      } as never,
+    );
     return { service, enqueueBookingConfirmation, prisma };
   }
 
@@ -127,9 +178,22 @@ describe('PixLifecycleService — webhook idempotency (confirmPaid)', () => {
     const service = new PixLifecycleService(
       prisma as never,
       { enqueueBookingConfirmation } as never,
+      { runsBackgroundJobs: true } as never,
     );
 
     await expect(service.confirmPaid('appt-1')).resolves.toBe('skipped');
     expect(enqueueBookingConfirmation).not.toHaveBeenCalled();
+  });
+});
+
+describe('PixLifecycleService — PROCESS_ROLE gating', () => {
+  it('não inicia timer quando runsBackgroundJobs=false', () => {
+    const service = new PixLifecycleService(
+      {} as never,
+      {} as never,
+      { runsBackgroundJobs: false } as never,
+    );
+    service.onModuleInit();
+    expect((service as unknown as { timer: unknown }).timer).toBeNull();
   });
 });

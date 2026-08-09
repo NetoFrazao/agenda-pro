@@ -20,7 +20,11 @@ import {
   startOfMonthInTimeZone,
   toDateKey,
 } from '../common/availability/availability.engine';
-import { PUBLIC_PROFILE_TTL_SECONDS, RedisCacheService } from '../common/cache/redis-cache.service';
+import {
+  PUBLIC_PROFILE_TTL_SECONDS,
+  PUBLIC_SLOTS_TTL_SECONDS,
+  RedisCacheService,
+} from '../common/cache/redis-cache.service';
 import {
   DEFAULT_APPOINTMENTS_PAGE_SIZE,
   normalizePage,
@@ -33,7 +37,11 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { MercadoPagoService } from '../payments/mercadopago.service';
 import { EnvService } from '../config/env.service';
 import { BookPublicDto, PublicReviewDto, RescheduleDto } from './dto/appointment.dto';
-import { planAllowsPixDeposit } from '../billing/plan-entitlements';
+import {
+  planAllowsPixDeposit,
+  subscriptionAllowsPublicBooking,
+} from '../billing/plan-entitlements';
+import { generateManageToken, hashToken } from '../common/crypto/tokens';
 import { assertValidTransition, isCancellableStatus } from './appointment-state';
 import { LoyaltyService } from '../loyalty/loyalty.service';
 
@@ -125,9 +133,23 @@ export class AppointmentsService {
       include: {
         tenant: true,
         service: { select: { id: true, name: true, durationMinutes: true } },
+        pixCharge: { select: { status: true } },
       },
     });
     if (!appt) throw new NotFoundException('Agendamento não encontrado');
+
+    // Bloqueia staff de furar sinal PIX (FSM já impede; defesa explícita + mensagem clara)
+    if (
+      appt.status === AppointmentStatus.PENDING_PAYMENT &&
+      (status === AppointmentStatus.CONFIRMED || status === AppointmentStatus.SCHEDULED)
+    ) {
+      const paid = appt.pixCharge?.status === PixChargeStatus.PAID;
+      if (!paid) {
+        throw new BadRequestException(
+          'Agendamento aguardando pagamento do sinal PIX — só confirma automaticamente após o pagamento.',
+        );
+      }
+    }
 
     assertValidTransition(appt.status, status);
 
@@ -162,6 +184,7 @@ export class AppointmentsService {
     });
 
     if (status === AppointmentStatus.CANCELLED && appt.status !== AppointmentStatus.CANCELLED) {
+      await this.notifications.cancelPendingForAppointment(id);
       await this.notifications.enqueueBookingCancelled(id, 'professional');
       await notifyNextWaitlistCandidate(
         this.prisma,
@@ -170,6 +193,7 @@ export class AppointmentsService {
         appt.startsAt,
         appt.tenant,
       );
+      await this.cache.invalidatePublicSlots(appt.tenant.slug);
     }
 
     // Retenção: após COMPLETED, sugere remarcar (API; UI opcional)
@@ -279,6 +303,7 @@ export class AppointmentsService {
   async invalidatePublicProfileCache(tenantIdOrSlug: { tenantId?: string; slug?: string }) {
     if (tenantIdOrSlug.slug) {
       await this.cache.invalidatePublicProfile(tenantIdOrSlug.slug);
+      await this.cache.invalidatePublicSlots(tenantIdOrSlug.slug);
       return;
     }
     if (tenantIdOrSlug.tenantId) {
@@ -293,6 +318,16 @@ export class AppointmentsService {
   }
 
   async getPublicSlots(slug: string, serviceId: string, dateKey: string, professionalId?: string) {
+    const cacheKey = this.cache.publicSlotsKey(slug, serviceId, dateKey, professionalId);
+    const cached = await this.cache.getJson<{
+      date: string;
+      timezone: string;
+      serviceId: string;
+      professionalId: string;
+      slots: string[];
+    }>(cacheKey);
+    if (cached) return cached;
+
     const tenant = await this.prisma.tenant.findFirst({
       where: { slug, deletedAt: null },
     });
@@ -308,13 +343,15 @@ export class AppointmentsService {
     // Janela máxima de agendamento futuro (regra do estabelecimento)
     const maxDate = new Date(Date.now() + tenant.maxAdvanceDays * 86_400_000);
     if (dateKey > toDateKey(maxDate, tenant.timezone)) {
-      return {
+      const empty = {
         date: dateKey,
         timezone: tenant.timezone,
         serviceId: service.id,
         professionalId: professional.id,
-        slots: [],
+        slots: [] as string[],
       };
+      await this.cache.setJson(cacheKey, empty, PUBLIC_SLOTS_TTL_SECONDS);
+      return empty;
     }
 
     const slots = await this.computeSlotsFor(
@@ -324,13 +361,15 @@ export class AppointmentsService {
       dateKey,
     );
 
-    return {
+    const result = {
       date: dateKey,
       timezone: tenant.timezone,
       serviceId: service.id,
       professionalId: professional.id,
       slots: slots.map((s) => s.toISOString()),
     };
+    await this.cache.setJson(cacheKey, result, PUBLIC_SLOTS_TTL_SECONDS);
+    return result;
   }
 
   private async resolveProfessional(tenantId: string, professionalId?: string): Promise<User> {
@@ -417,6 +456,12 @@ export class AppointmentsService {
     });
     if (!tenant) throw new NotFoundException('Profissional não encontrado');
 
+    if (!subscriptionAllowsPublicBooking(tenant.subscription?.status)) {
+      throw new ConflictException(
+        'Este profissional está temporariamente sem agenda online. Tente novamente mais tarde.',
+      );
+    }
+
     const service = await this.prisma.service.findFirst({
       where: { id: dto.serviceId, tenantId: tenant.id, isActive: true, deletedAt: null },
     });
@@ -428,11 +473,7 @@ export class AppointmentsService {
     if (Number.isNaN(startsAt.getTime())) {
       throw new BadRequestException('startsAt inválido');
     }
-    if (startsAt.getTime() <= Date.now() + tenant.minNoticeMinutes * 60_000) {
-      throw new BadRequestException(
-        `Este horário exige agendamento com pelo menos ${tenant.minNoticeMinutes} minutos de antecedência`,
-      );
-    }
+    this.assertWithinBookingWindow(startsAt, tenant);
 
     const endsAt = new Date(startsAt.getTime() + service.durationMinutes * 60_000);
     const dateKey = toDateKey(startsAt, tenant.timezone);
@@ -454,7 +495,7 @@ export class AppointmentsService {
       planAllowsPixDeposit(tenant.plan);
 
     try {
-      const appointment = await this.prisma.$transaction(async (tx) => {
+      const booked = await this.prisma.$transaction(async (tx) => {
         // Lock advisory baseado no hash do professionalId (evita race entre requests)
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${professional.id}))`;
 
@@ -508,7 +549,8 @@ export class AppointmentsService {
               },
             });
 
-        return tx.appointment.create({
+        const rawManageToken = generateManageToken();
+        const appointment = await tx.appointment.create({
           data: {
             tenantId: tenant.id,
             professionalId: professional.id,
@@ -520,13 +562,17 @@ export class AppointmentsService {
             status: useOnlineDeposit
               ? AppointmentStatus.PENDING_PAYMENT
               : AppointmentStatus.SCHEDULED,
+            manageToken: hashToken(rawManageToken),
             customerNotes: dto.notes,
             priceCentsSnapshot: service.priceCents,
             durationMinutesSnapshot: service.durationMinutes,
           },
           include: { client: true, service: true },
         });
+        return { appointment, rawManageToken };
       });
+
+      const { appointment, rawManageToken } = booked;
 
       // Marca entrada da lista de espera desse cliente como atendida
       await this.prisma.waitlistEntry.updateMany({
@@ -543,8 +589,10 @@ export class AppointmentsService {
       if (useOnlineDeposit) {
         pix = await this.createDepositCharge(appointment.id, tenant, service.depositCents, dto);
       } else {
-        await this.notifications.enqueueBookingConfirmation(appointment.id);
+        await this.notifications.enqueueBookingConfirmation(appointment.id, rawManageToken);
       }
+
+      await this.cache.invalidatePublicSlots(slug);
 
       return {
         id: appointment.id,
@@ -566,7 +614,7 @@ export class AppointmentsService {
           durationMinutes: appointment.service.durationMinutes,
           priceCents: appointment.service.priceCents,
         },
-        manageUrl: `${this.env.appPublicUrl}/agendamento/${appointment.manageToken}`,
+        manageUrl: `${this.env.appPublicUrl}/agendamento/${rawManageToken}`,
         pix,
         depositCents: service.depositCents,
         depositMode: useOnlineDeposit ? 'pix' : service.depositCents > 0 ? 'local' : null,
@@ -654,37 +702,66 @@ export class AppointmentsService {
   // Auto-gestão pelo cliente (link com manageToken — sem login)
   // ---------------------------------------------------------------------------
 
+  /**
+   * Resolve manage link: hash(raw) primeiro; dual-read plaintext para tokens legados (cuid/md5).
+   */
   private async findByManageToken(token: string) {
-    const appointment = await this.prisma.appointment.findUnique({
-      where: { manageToken: token },
-      include: {
-        client: { select: { name: true, phone: true, email: true } },
-        service: { select: { id: true, name: true, durationMinutes: true, priceCents: true } },
-        professional: { select: { id: true, name: true } },
-        tenant: {
-          select: {
-            slug: true,
-            name: true,
-            timezone: true,
-            address: true,
-            whatsapp: true,
-            cancelMinHours: true,
-          },
+    const include = {
+      client: { select: { name: true, phone: true, email: true } },
+      service: { select: { id: true, name: true, durationMinutes: true, priceCents: true } },
+      professional: { select: { id: true, name: true } },
+      tenant: {
+        select: {
+          slug: true,
+          name: true,
+          timezone: true,
+          address: true,
+          whatsapp: true,
+          cancelMinHours: true,
         },
-        pixCharge: {
-          select: {
-            status: true,
-            amountCents: true,
-            copyPaste: true,
-            qrCodeBase64: true,
-            expiresAt: true,
-          },
-        },
-        review: { select: { rating: true, comment: true } },
       },
+      pixCharge: {
+        select: {
+          status: true,
+          amountCents: true,
+          copyPaste: true,
+          qrCodeBase64: true,
+          expiresAt: true,
+        },
+      },
+      review: { select: { rating: true, comment: true } },
+    } satisfies Prisma.AppointmentInclude;
+
+    const byHash = await this.prisma.appointment.findUnique({
+      where: { manageToken: hashToken(token) },
+      include,
     });
-    if (!appointment) throw new NotFoundException('Agendamento não encontrado');
-    return appointment;
+    if (byHash) return byHash;
+
+    // Legado: token armazenado em claro (cuid / md5 pré-hash)
+    const legacy = await this.prisma.appointment.findUnique({
+      where: { manageToken: token },
+      include,
+    });
+    if (!legacy) throw new NotFoundException('Agendamento não encontrado');
+    return legacy;
+  }
+
+  private assertWithinBookingWindow(
+    startsAt: Date,
+    tenant: { minNoticeMinutes: number; maxAdvanceDays: number; timezone: string },
+  ) {
+    if (startsAt.getTime() <= Date.now() + tenant.minNoticeMinutes * 60_000) {
+      throw new BadRequestException(
+        `Este horário exige agendamento com pelo menos ${tenant.minNoticeMinutes} minutos de antecedência`,
+      );
+    }
+    const maxDate = new Date(Date.now() + tenant.maxAdvanceDays * 86_400_000);
+    if (toDateKey(startsAt, tenant.timezone) > toDateKey(maxDate, tenant.timezone)) {
+      throw new BadRequestException(
+        `Agendamentos só são aceitos com até ${tenant.maxAdvanceDays} dias de antecedência`,
+      );
+    }
   }
 
   async getByManageToken(token: string) {
@@ -721,6 +798,12 @@ export class AppointmentsService {
     if (appointment.status === AppointmentStatus.CONFIRMED) {
       return { ok: true, status: appointment.status };
     }
+    // Sinal PIX: só PixLifecycleService.confirmPaid promove PENDING_PAYMENT → CONFIRMED
+    if (appointment.status === AppointmentStatus.PENDING_PAYMENT) {
+      throw new BadRequestException(
+        'Confirmação disponível após o pagamento do sinal PIX. Conclua o pagamento ou aguarde a confirmação automática.',
+      );
+    }
     assertValidTransition(appointment.status, AppointmentStatus.CONFIRMED);
     await this.prisma.appointment.update({
       where: { id: appointment.id },
@@ -752,6 +835,7 @@ export class AppointmentsService {
       },
     });
 
+    await this.notifications.cancelPendingForAppointment(appointment.id);
     await this.notifications.enqueueBookingCancelled(appointment.id, 'client');
     const tenant = await this.prisma.tenant.findUnique({ where: { id: appointment.tenantId } });
     if (tenant) {
@@ -762,6 +846,7 @@ export class AppointmentsService {
         appointment.startsAt,
         tenant,
       );
+      await this.cache.invalidatePublicSlots(tenant.slug);
     }
 
     return { ok: true };
@@ -788,6 +873,7 @@ export class AppointmentsService {
     if (Number.isNaN(newStartsAt.getTime())) {
       throw new BadRequestException('startsAt inválido');
     }
+    this.assertWithinBookingWindow(newStartsAt, tenant);
     const newEndsAt = new Date(
       newStartsAt.getTime() + appointment.durationMinutesSnapshot * 60_000,
     );
@@ -851,7 +937,9 @@ export class AppointmentsService {
       appointment.startsAt,
       tenant,
     );
-    await this.notifications.enqueueBookingConfirmation(appointment.id);
+    await this.notifications.enqueueBookingConfirmation(appointment.id, token);
+
+    await this.cache.invalidatePublicSlots(tenant.slug);
 
     return { ok: true, startsAt: newStartsAt.toISOString() };
   }

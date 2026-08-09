@@ -1,5 +1,6 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { UserRole } from '@prisma/client';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AuthUser, CurrentUser } from '../common/decorators/current-user.decorator';
@@ -21,6 +22,7 @@ export class TeamController {
   }
 
   @Post()
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
   @Roles(UserRole.OWNER)
   create(@CurrentUser() user: AuthUser, @Body() dto: CreateTeamMemberDto) {
     return this.team.create(user.tenantId, user.role, dto);

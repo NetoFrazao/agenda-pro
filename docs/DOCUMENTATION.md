@@ -9,7 +9,10 @@
 | [README](../README.md) | Visão geral, quick start, status |
 | [SETUP](./SETUP.md) | Ambiente local completo |
 | [ARCHITECTURE](./ARCHITECTURE.md) | Stack, módulos, fluxos |
+| [PERFORMANCE](./PERFORMANCE.md) | Worker, PROCESS_ROLE, cache Redis |
+| [SCORECARD Performance](../SCORECARD_PERFORMANCE_SCALE.md) | Nota honestidade escala |
 | [FINAL-AUDIT](../FINAL-AUDIT.md) | O que foi entregue no hardening |
+| [MEGA CODE REVIEW](../MEGA_CODE_REVIEW.md) | Consolidação das 10 revisões (2026-08-09) |
 
 ## Operação e produção
 

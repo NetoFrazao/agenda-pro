@@ -63,7 +63,7 @@ npm run test:e2e -w @agenda-pro/api
 | Agenda | `GET /api/appointments` → `{ items, total, page, pageSize }` |
 | CRM | `/api/clients` · consent · profile |
 | Billing | `/api/billing/*` |
-| LGPD | `GET /api/account/export` · `DELETE /api/account` |
+| LGPD | `POST /api/account/export` `{ password }` · `DELETE /api/account` `{ password }` (step-up) |
 | Health | `/api/health` · `/api/health/ready` |
 
 Contratos: [docs/API.md](./docs/API.md) · Arquitetura: [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) · Segurança: [docs/SECURITY.md](./docs/SECURITY.md)

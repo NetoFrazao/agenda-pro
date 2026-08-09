@@ -10,6 +10,7 @@
 - JWT validado contra DB (`isActive`, `deletedAt`, tenant ativo)
 - Rate limit em login / forgot / book público / webhooks
 - Reset de senha: token hasheado, uso único, invalida tokens anteriores
+- **Step-up LGPD:** `POST /account/export` e `DELETE /account` exigem senha do OWNER
 
 ### Autorização e multi-tenant
 

@@ -6,6 +6,10 @@ import { EnvService } from '../../config/env.service';
 export const PUBLIC_PROFILE_CACHE_PREFIX = 'cache:public:profile:';
 export const PUBLIC_PROFILE_TTL_SECONDS = 60;
 
+/** Slots públicos — TTL baixo; booking sempre revalida com lock. */
+export const PUBLIC_SLOTS_CACHE_PREFIX = 'cache:public:slots:';
+export const PUBLIC_SLOTS_TTL_SECONDS = 20;
+
 /**
  * Cache Redis opcional com degrade seguro: se Redis estiver down,
  * get/set/del viram no-op e a app segue pelo Postgres.
@@ -32,6 +36,15 @@ export class RedisCacheService implements OnModuleDestroy {
 
   publicProfileKey(slug: string): string {
     return `${PUBLIC_PROFILE_CACHE_PREFIX}${slug}`;
+  }
+
+  publicSlotsKey(
+    slug: string,
+    serviceId: string,
+    dateKey: string,
+    professionalId?: string,
+  ): string {
+    return `${PUBLIC_SLOTS_CACHE_PREFIX}${slug}:${serviceId}:${dateKey}:${professionalId ?? '_'}`;
   }
 
   private async ensureClient(): Promise<Redis | null> {
@@ -111,21 +124,58 @@ export class RedisCacheService implements OnModuleDestroy {
     }
   }
 
+  /** Apaga chaves por prefixo via SCAN (sem KEYS bloqueante). */
+  async delByPrefix(prefix: string): Promise<void> {
+    const client = await this.ensureClient();
+    if (!client) return;
+    try {
+      let cursor = '0';
+      do {
+        const [next, keys] = await client.scan(cursor, 'MATCH', `${prefix}*`, 'COUNT', 64);
+        cursor = next;
+        if (keys.length > 0) await client.del(...keys);
+      } while (cursor !== '0');
+    } catch (err) {
+      this.disabled = true;
+      this.logger.warn(`cache delByPrefix failed (${(err as Error).message})`);
+    }
+  }
+
   /** Invalida perfil público por slug (no-op se Redis down). */
   async invalidatePublicProfile(slug: string): Promise<void> {
     await this.del(this.publicProfileKey(slug));
   }
 
-  /** Resolve slug do tenant e invalida (útil em mutações autenticadas). */
+  /** Invalida todos os slots cacheados do slug (book/cancel/availability). */
+  async invalidatePublicSlots(slug: string): Promise<void> {
+    await this.delByPrefix(`${PUBLIC_SLOTS_CACHE_PREFIX}${slug}:`);
+  }
+
+  /** Resolve slug do tenant e invalida perfil + slots. */
   async invalidatePublicProfileByTenantId(
     tenantId: string,
     resolveSlug: (tenantId: string) => Promise<string | null>,
   ): Promise<void> {
     try {
       const slug = await resolveSlug(tenantId);
-      if (slug) await this.invalidatePublicProfile(slug);
+      if (slug) {
+        await this.invalidatePublicProfile(slug);
+        await this.invalidatePublicSlots(slug);
+      }
     } catch (err) {
       this.logger.warn(`cache invalidate by tenant failed (${(err as Error).message})`);
+    }
+  }
+
+  async invalidatePublicSlotsByTenantId(
+    tenantId: string,
+    resolveSlug: (tenantId: string) => Promise<string | null>,
+  ): Promise<void> {
+    try {
+      const slug = await resolveSlug(tenantId);
+      if (slug) await this.invalidatePublicSlots(slug);
+    } catch (err) {
+      this.logger.warn(`cache slots invalidate by tenant failed (${(err as Error).message})`);
     }
   }
 }

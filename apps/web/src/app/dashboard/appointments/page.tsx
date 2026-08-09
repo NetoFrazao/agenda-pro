@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   Badge,
@@ -22,12 +22,15 @@ import {
 } from '@/lib/format';
 import type {
   Appointment,
+  AppointmentListResponse,
   AppointmentStatus,
   AppointmentStatusUpdateResult,
   AuthUserPayload,
   PixChargeStatus,
   TeamMember,
 } from '@/lib/types';
+
+const PAGE_SIZE = 20;
 
 const STATUS_OPTIONS: AppointmentStatus[] = [
   'SCHEDULED',
@@ -57,15 +60,22 @@ function toInputDate(d: Date) {
 
 export default function AppointmentsPage() {
   const today = useMemo(() => startOfDay(new Date()), []);
-  const [from, setFrom] = useState(toInputDate(today));
-  const [to, setTo] = useState(() => {
+  const defaultTo = useMemo(() => {
     const t = new Date(today);
     t.setDate(t.getDate() + 14);
     return toInputDate(t);
-  });
+  }, [today]);
+  const [from, setFrom] = useState(toInputDate(today));
+  const [to, setTo] = useState(defaultTo);
   const [professionalId, setProfessionalId] = useState('');
+  const [appliedFrom, setAppliedFrom] = useState(toInputDate(today));
+  const [appliedTo, setAppliedTo] = useState(defaultTo);
+  const [appliedProfessionalId, setAppliedProfessionalId] = useState('');
+  const [page, setPage] = useState(1);
   const [team, setTeam] = useState<TeamMember[]>([]);
   const [items, setItems] = useState<Appointment[]>([]);
+  const [total, setTotal] = useState(0);
+  const [pageSize, setPageSize] = useState(PAGE_SIZE);
   const [timezone, setTimezone] = useState<string | undefined>();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -79,41 +89,55 @@ export default function AppointmentsPage() {
     serviceName?: string;
   } | null>(null);
 
-  async function load(rangeFrom = from, rangeTo = to, filterProfessional = professionalId) {
+  const load = useCallback(async () => {
     setError(null);
-    const fromIso = new Date(`${rangeFrom}T00:00:00`).toISOString();
-    const toIso = new Date(`${rangeTo}T23:59:59`).toISOString();
-    const qs = new URLSearchParams({ from: fromIso, to: toIso });
-    if (filterProfessional) qs.set('professionalId', filterProfessional);
+    const fromIso = new Date(`${appliedFrom}T00:00:00`).toISOString();
+    const toIso = new Date(`${appliedTo}T23:59:59`).toISOString();
+    const qs = new URLSearchParams({
+      from: fromIso,
+      to: toIso,
+      page: String(page),
+      pageSize: String(PAGE_SIZE),
+    });
+    if (appliedProfessionalId) qs.set('professionalId', appliedProfessionalId);
     const [me, data] = await Promise.all([
       api<AuthUserPayload>('/api/auth/me'),
-      api<Appointment[] | { items: Appointment[] }>(`/api/appointments?${qs.toString()}`),
+      api<AppointmentListResponse>(`/api/appointments?${qs.toString()}`),
     ]);
     setTimezone(me.tenant?.timezone);
-    setItems(Array.isArray(data) ? data : (data?.items ?? []));
-  }
+    setItems(data.items ?? []);
+    setTotal(data.total ?? 0);
+    setPageSize(data.pageSize ?? PAGE_SIZE);
+  }, [appliedFrom, appliedTo, appliedProfessionalId, page]);
 
   useEffect(() => {
     void api<TeamMember[]>('/api/team')
       .then((data) => setTeam(Array.isArray(data) ? data : []))
       .catch(() => setTeam([]));
-    void load()
-      .catch((err) =>
-        setError(err instanceof ApiError ? err.message : 'Erro ao carregar agendamentos.'),
-      )
-      .finally(() => setLoading(false));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function applyFilter() {
+  useEffect(() => {
+    let cancelled = false;
     setLoading(true);
-    try {
-      await load();
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Erro ao filtrar.');
-    } finally {
-      setLoading(false);
-    }
+    void load()
+      .catch((err) => {
+        if (!cancelled) {
+          setError(err instanceof ApiError ? err.message : 'Erro ao carregar agendamentos.');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [load]);
+
+  function applyFilter() {
+    setAppliedFrom(from);
+    setAppliedTo(to);
+    setAppliedProfessionalId(professionalId);
+    setPage(1);
   }
 
   async function updateStatus(id: string, status: AppointmentStatus) {
@@ -148,6 +172,7 @@ export default function AppointmentsPage() {
 
   const sorted = [...items].sort((a, b) => +new Date(a.startsAt) - +new Date(b.startsAt));
   const hasMultipleProfessionals = team.length > 1;
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   return (
     <div className="animate-fade-up">
@@ -210,7 +235,7 @@ export default function AppointmentsPage() {
                 )}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center justify-center rounded-xl bg-mint-deep px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90"
+                className="inline-flex min-h-11 items-center justify-center rounded-xl bg-mint-deep px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90"
               >
                 Remarcar no WhatsApp
               </a>
@@ -218,7 +243,7 @@ export default function AppointmentsPage() {
             {rebookingHint.clientId ? (
               <a
                 href={`/dashboard/clients`}
-                className="inline-flex items-center justify-center rounded-xl border border-paper-2 bg-paper px-4 py-2 text-sm font-semibold text-ink transition hover:border-mint-deep/40"
+                className="inline-flex min-h-11 items-center justify-center rounded-xl border border-paper-2 bg-paper px-4 py-2 text-sm font-semibold text-ink transition hover:border-mint-deep/40"
               >
                 Ver clientes
               </a>
@@ -237,53 +262,82 @@ export default function AppointmentsPage() {
           Ajuste o filtro de datas ou compartilhe seu link público.
         </EmptyState>
       ) : (
-        <ul className="space-y-3">
-          {sorted.map((a) => {
-            const pixBadge = a.pixCharge ? PIX_BADGE[a.pixCharge.status] : null;
-            return (
-              <li key={a.id} className="surface-elevated rounded-2xl p-4 sm:p-5">
-                <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <p className="font-semibold text-ink">{a.client?.name || 'Cliente'}</p>
-                      <StatusBadge status={a.status} />
-                      {pixBadge ? <Badge tone={pixBadge.tone}>{pixBadge.label}</Badge> : null}
+        <>
+          <ul className="space-y-3">
+            {sorted.map((a) => {
+              const pixBadge = a.pixCharge ? PIX_BADGE[a.pixCharge.status] : null;
+              return (
+                <li key={a.id} className="surface-elevated rounded-2xl p-4 sm:p-5">
+                  <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="font-semibold text-ink">{a.client?.name || 'Cliente'}</p>
+                        <StatusBadge status={a.status} />
+                        {pixBadge ? <Badge tone={pixBadge.tone}>{pixBadge.label}</Badge> : null}
+                      </div>
+                      <p className="mt-1.5 text-sm text-muted">
+                        {a.service?.name || 'Serviço'} · {formatDateTime(a.startsAt, timezone)}
+                        {hasMultipleProfessionals && a.professional?.name
+                          ? ` · ${a.professional.name}`
+                          : ''}
+                      </p>
+                      {a.client?.phone ? (
+                        <p className="mt-1 text-sm text-ink-muted">{a.client.phone}</p>
+                      ) : null}
+                      {a.customerNotes ? (
+                        <p className="mt-2 text-sm text-muted">Obs.: {a.customerNotes}</p>
+                      ) : null}
                     </div>
-                    <p className="mt-1.5 text-sm text-muted">
-                      {a.service?.name || 'Serviço'} · {formatDateTime(a.startsAt, timezone)}
-                      {hasMultipleProfessionals && a.professional?.name
-                        ? ` · ${a.professional.name}`
-                        : ''}
-                    </p>
-                    {a.client?.phone ? (
-                      <p className="mt-1 text-sm text-ink-muted">{a.client.phone}</p>
-                    ) : null}
-                    {a.customerNotes ? (
-                      <p className="mt-2 text-sm text-muted">Obs.: {a.customerNotes}</p>
-                    ) : null}
+                    <div className="w-full sm:min-w-[12rem] sm:max-w-[14rem]">
+                      <label
+                        htmlFor={`status-${a.id}`}
+                        className="mb-1.5 block text-xs font-medium text-muted"
+                      >
+                        Alterar status
+                      </label>
+                      <Select
+                        id={`status-${a.id}`}
+                        value={a.status}
+                        disabled={updatingId === a.id}
+                        onChange={(e) => void updateStatus(a.id, e.target.value as AppointmentStatus)}
+                      >
+                        {STATUS_OPTIONS.map((s) => (
+                          <option key={s} value={s}>
+                            {APPOINTMENT_STATUS_LABEL[s] || s}
+                          </option>
+                        ))}
+                      </Select>
+                    </div>
                   </div>
-                  <div className="w-full sm:min-w-[12rem] sm:max-w-[14rem]">
-                    <label htmlFor={`status-${a.id}`} className="mb-1.5 block text-xs font-medium text-muted">
-                      Alterar status
-                    </label>
-                    <Select
-                      id={`status-${a.id}`}
-                      value={a.status}
-                      disabled={updatingId === a.id}
-                      onChange={(e) => void updateStatus(a.id, e.target.value as AppointmentStatus)}
-                    >
-                      {STATUS_OPTIONS.map((s) => (
-                        <option key={s} value={s}>
-                          {APPOINTMENT_STATUS_LABEL[s] || s}
-                        </option>
-                      ))}
-                    </Select>
-                  </div>
-                </div>
-              </li>
-            );
-          })}
-        </ul>
+                </li>
+              );
+            })}
+          </ul>
+
+          <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm text-muted">
+              {total} agendamento{total === 1 ? '' : 's'} · página {page} de {totalPages}
+            </p>
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={page <= 1 || loading}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+              >
+                Anterior
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={page >= totalPages || loading}
+                onClick={() => setPage((p) => p + 1)}
+              >
+                Próxima
+              </Button>
+            </div>
+          </div>
+        </>
       )}
     </div>
   );

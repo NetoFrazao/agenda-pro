@@ -1,6 +1,7 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { AppointmentStatus, PixChargeStatus } from '@prisma/client';
 import { notifyNextWaitlistCandidate } from '../common/waitlist/notify-next';
+import { EnvService } from '../config/env.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -13,6 +14,10 @@ export type ConfirmPaidResult = 'confirmed' | 'already_paid' | 'skipped' | 'paid
  * Libera slots travados em PENDING_PAYMENT quando o PIX expira/cancela (C-02).
  * Confirma pagamento de forma atômica (idempotente) — webhook duplicado não
  * re-notifica nem reconfirma (Fase 4).
+ *
+ * Intervalo de reconcile só sobe quando `PROCESS_ROLE` é `worker` ou `all`.
+ * Em `api` (compose prod), webhook/confirmPaid/release continuam disponíveis;
+ * o timer roda só no processo worker.
  */
 @Injectable()
 export class PixLifecycleService implements OnModuleInit, OnModuleDestroy {
@@ -22,9 +27,14 @@ export class PixLifecycleService implements OnModuleInit, OnModuleDestroy {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsService,
+    private readonly env: EnvService,
   ) {}
 
   onModuleInit() {
+    if (!this.env.runsBackgroundJobs) {
+      this.logger.log('Reconcile PIX desligado neste processo (PROCESS_ROLE=api). Rode o worker.');
+      return;
+    }
     void this.reconcileExpired().catch((err) =>
       this.logger.warn(`Reconciliação PIX inicial falhou: ${(err as Error).message}`),
     );
@@ -89,9 +99,10 @@ export class PixLifecycleService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * Cancela agendamento PENDING_PAYMENT e marca a cobrança (EXPIRED ou CANCELLED).
-   * Idempotente: charge já terminal (PAID/EXPIRED/CANCELLED/REFUNDED) + appointment
-   * não pendente → no-op.
+   * Expira/cancela cobrança PENDING e libera o slot.
+   * Cancela appointment se ainda PENDING_PAYMENT **ou** se estiver CONFIRMED/SCHEDULED
+   * com charge ainda não PAID (recuperação de bypass histórico).
+   * Idempotente: charge terminal + appointment já cancelado/concluído → no-op.
    */
   async releasePendingPayment(
     appointmentId: string,
@@ -107,11 +118,17 @@ export class PixLifecycleService implements OnModuleInit, OnModuleDestroy {
     });
     if (!appt) return false;
 
-    const wasPending = appt.status === AppointmentStatus.PENDING_PAYMENT;
     const canExpireCharge =
       Boolean(appt.pixCharge) && appt.pixCharge!.status === PixChargeStatus.PENDING;
+    const unpaidActiveHold =
+      appt.status === AppointmentStatus.PENDING_PAYMENT ||
+      (canExpireCharge &&
+        (appt.status === AppointmentStatus.CONFIRMED ||
+          appt.status === AppointmentStatus.SCHEDULED));
 
-    if (!wasPending && !canExpireCharge) return false;
+    if (!unpaidActiveHold && !canExpireCharge) return false;
+
+    const statusBefore = appt.status;
 
     await this.prisma.$transaction(async (tx) => {
       if (canExpireCharge && appt.pixCharge) {
@@ -120,9 +137,12 @@ export class PixLifecycleService implements OnModuleInit, OnModuleDestroy {
           data: { status: chargeStatus },
         });
       }
-      if (wasPending) {
+      if (unpaidActiveHold) {
         await tx.appointment.updateMany({
-          where: { id: appt.id, status: AppointmentStatus.PENDING_PAYMENT },
+          where: {
+            id: appt.id,
+            status: { in: [statusBefore] },
+          },
           data: {
             status: AppointmentStatus.CANCELLED,
             cancelledAt: new Date(),
@@ -137,12 +157,13 @@ export class PixLifecycleService implements OnModuleInit, OnModuleDestroy {
         event: 'pix.release',
         appointmentId,
         chargeStatus,
-        wasPending,
+        statusBefore,
+        cancelledAppointment: unpaidActiveHold,
         reason: reason.slice(0, 120),
       }),
     );
 
-    if (wasPending) {
+    if (unpaidActiveHold) {
       await notifyNextWaitlistCandidate(
         this.prisma,
         this.notifications,
@@ -152,7 +173,7 @@ export class PixLifecycleService implements OnModuleInit, OnModuleDestroy {
       );
       this.logger.log(`Slot liberado — appointment ${appointmentId} (${reason})`);
     }
-    return wasPending;
+    return unpaidActiveHold;
   }
 
   /** Marca cobrança PAID → REFUNDED (não altera appointment). Idempotente. */

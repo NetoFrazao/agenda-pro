@@ -33,6 +33,7 @@ export default function SettingsPage() {
   const [me, setMe] = useState<AuthUserPayload | null>(null);
   const [settings, setSettings] = useState<TenantSettings | null>(null);
   const [confirmText, setConfirmText] = useState('');
+  const [deletePassword, setDeletePassword] = useState('');
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -166,6 +167,10 @@ export default function SettingsPage() {
       setError('Digite EXCLUIR para confirmar.');
       return;
     }
+    if (deletePassword.length < 8) {
+      setError('Informe sua senha atual para confirmar a exclusão.');
+      return;
+    }
     if (
       !confirm(
         'Esta ação apaga sua conta e dados pessoais (LGPD). Não pode ser desfeita. Continuar?',
@@ -176,7 +181,10 @@ export default function SettingsPage() {
     setDeleting(true);
     setError(null);
     try {
-      await api('/api/account', { method: 'DELETE' });
+      await api('/api/account', {
+        method: 'DELETE',
+        body: { password: deletePassword },
+      });
       clearSessionFlag();
       router.replace('/');
     } catch (err) {
@@ -452,7 +460,7 @@ export default function SettingsPage() {
           Agenda Pro. Agendamentos e histórico vinculados serão apagados conforme a política de
           retenção.
         </p>
-        <div className="mt-4 max-w-sm">
+        <div className="mt-4 max-w-sm space-y-3">
           <Field label="Digite EXCLUIR para confirmar" id="confirm-delete">
             <Input
               id="confirm-delete"
@@ -461,12 +469,21 @@ export default function SettingsPage() {
               autoComplete="off"
             />
           </Field>
+          <Field label="Senha atual" id="delete-password" hint="Reautenticação obrigatória (step-up).">
+            <Input
+              id="delete-password"
+              type="password"
+              autoComplete="current-password"
+              value={deletePassword}
+              onChange={(e) => setDeletePassword(e.target.value)}
+            />
+          </Field>
         </div>
         <Button
           type="button"
           variant="danger"
           className="mt-4"
-          disabled={deleting || confirmText !== 'EXCLUIR'}
+          disabled={deleting || confirmText !== 'EXCLUIR' || deletePassword.length < 8}
           onClick={() => void deleteAccount()}
         >
           {deleting ? 'Excluindo…' : 'Excluir minha conta'}

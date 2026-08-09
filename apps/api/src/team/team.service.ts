@@ -71,6 +71,7 @@ export class TeamService {
       select: MEMBER_SELECT,
     });
     await this.cache.invalidatePublicProfile(tenant.slug);
+    await this.cache.invalidatePublicSlots(tenant.slug);
     return created;
   }
 

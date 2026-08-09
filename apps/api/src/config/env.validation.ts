@@ -47,6 +47,13 @@ const envSchema = z.object({
   MERCADOPAGO_ACCESS_TOKEN: z.string().optional().default(''),
   /// Segredo do webhook MP (x-signature). Em prod, obrigatório se MP estiver ativo.
   MERCADOPAGO_WEBHOOK_SECRET: z.string().optional().default(''),
+  /**
+   * Papel do processo:
+   * - `all` (default): HTTP + BullMQ Worker + reconcile PIX (dev / single-process)
+   * - `api`: só HTTP (enfileira; sem Worker / setInterval PIX)
+   * - `worker`: só background (entrypoint `worker.ts`)
+   */
+  PROCESS_ROLE: z.enum(['all', 'api', 'worker']).default('all'),
 });
 
 export type EnvVars = z.infer<typeof envSchema>;

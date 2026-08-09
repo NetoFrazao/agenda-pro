@@ -104,6 +104,14 @@ export interface Appointment {
   durationMinutesSnapshot?: number;
 }
 
+/** Resposta paginada de GET /api/appointments */
+export interface AppointmentListResponse {
+  total: number;
+  page: number;
+  pageSize: number;
+  items: Appointment[];
+}
+
 /** Resposta de PATCH /api/appointments/:id/status (retenção pós-COMPLETED). */
 export interface AppointmentStatusUpdateResult extends Appointment {
   rebookingSuggested?: boolean;

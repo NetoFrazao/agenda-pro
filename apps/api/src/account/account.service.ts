@@ -1,5 +1,13 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Injectable,
+  Logger,
+  NotFoundException,
+  UnauthorizedException,
+} from '@nestjs/common';
+import * as bcrypt from 'bcryptjs';
 import { randomBytes } from 'crypto';
+import { hashToken } from '../common/crypto/tokens';
 import { BillingService } from '../billing/billing.service';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -32,7 +40,20 @@ export class AccountService {
     private readonly billing: BillingService,
   ) {}
 
-  async exportData(tenantId: string) {
+  /** Exige senha atual do OWNER (sessão roubada não basta). */
+  private async assertOwnerPassword(userId: string, password: string) {
+    const user = await this.prisma.user.findFirst({
+      where: { id: userId, deletedAt: null, isActive: true },
+      select: { id: true, passwordHash: true, role: true },
+    });
+    if (!user) throw new UnauthorizedException('Sessão inválida');
+    const ok = await bcrypt.compare(password, user.passwordHash);
+    if (!ok) throw new ForbiddenException('Senha incorreta');
+  }
+
+  async exportData(tenantId: string, userId: string, password: string) {
+    await this.assertOwnerPassword(userId, password);
+
     const tenant = await this.prisma.tenant.findFirst({
       where: { id: tenantId, deletedAt: null },
     });
@@ -175,7 +196,9 @@ export class AccountService {
     };
   }
 
-  async deleteAccount(tenantId: string, userId: string) {
+  async deleteAccount(tenantId: string, userId: string, password: string) {
+    await this.assertOwnerPassword(userId, password);
+
     const tenant = await this.prisma.tenant.findFirst({
       where: { id: tenantId, deletedAt: null },
     });
@@ -229,7 +252,7 @@ export class AccountService {
           data: {
             customerNotes: null,
             cancelReason: null,
-            manageToken: `revoked_${randomBytes(24).toString('hex')}`,
+            manageToken: hashToken(`revoked_${randomBytes(32).toString('hex')}`),
           },
         });
       }

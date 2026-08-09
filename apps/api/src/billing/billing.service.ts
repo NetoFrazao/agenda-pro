@@ -98,6 +98,34 @@ export class BillingService {
 
   async createCheckout(tenantId: string, plan: PlanCode) {
     if (plan === PlanCode.STARTER) {
+      const existing = await this.prisma.subscription.findUnique({ where: { tenantId } });
+
+      // Fail-closed: não persistir free enquanto Stripe continuar cobrando
+      if (existing?.stripeSubscriptionId) {
+        if (!this.stripe) {
+          throw new ServiceUnavailableException(
+            'Não é possível voltar ao Starter: há assinatura Stripe ativa e o Stripe não está configurado para cancelá-la.',
+          );
+        }
+        try {
+          await this.stripe.subscriptions.cancel(existing.stripeSubscriptionId);
+          this.logger.log(
+            JSON.stringify({
+              event: 'billing.stripe.cancel_on_starter_downgrade',
+              tenantId,
+              stripeSubscriptionId: existing.stripeSubscriptionId,
+            }),
+          );
+        } catch (err) {
+          this.logger.error(
+            `Falha ao cancelar Stripe no downgrade STARTER tenant=${tenantId}: ${(err as Error).message}`,
+          );
+          throw new ServiceUnavailableException(
+            'Falha ao cancelar a assinatura no Stripe. O plano não foi alterado — tente novamente.',
+          );
+        }
+      }
+
       await this.prisma.tenant.update({
         where: { id: tenantId },
         data: { plan: PlanCode.STARTER },
@@ -115,6 +143,7 @@ export class BillingService {
           status: SubscriptionStatus.ACTIVE,
           cancelAtPeriodEnd: false,
           monthlyBookingLimit: PLAN_META.STARTER.monthlyBookingLimit,
+          stripeSubscriptionId: null,
         },
       });
       return {

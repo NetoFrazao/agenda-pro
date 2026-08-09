@@ -40,7 +40,7 @@ Autenticação dashboard: cookie `ap_access` **ou** `Authorization: Bearer <acce
 | Relatórios | `/reports/summary` (OWNER) |
 | Settings | `/settings` (OWNER) |
 | Billing | `/billing/plans`, checkout, cancel (OWNER) |
-| Conta LGPD | `GET /account/export`, `DELETE /account` (OWNER) |
+| Conta LGPD | `POST /account/export` + `DELETE /account` com body `{ password }` (step-up) |
 | Waitlist / Reviews | `/waitlist`, `/reviews` |
 
 ## Breaking change (Fase 7)

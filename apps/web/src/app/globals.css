@@ -16,7 +16,8 @@
   --color-mint-glow: #5eead4;
   --color-brass: #d4b483;
   --color-muted: #6b736e;
-  --color-muted-soft: #9aa39c;
+  /* ≈ #6b736e-ish floor for AA on paper; placeholders stay secondary but readable */
+  --color-muted-soft: #6b736e;
   --color-line: #d5dbd6;
   --color-danger: #b91c1c;
   --color-danger-bg: #fef2f2;

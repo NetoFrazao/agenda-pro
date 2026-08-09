@@ -12,13 +12,16 @@ flowchart TB
   Dash --> API
   API --> PG[(PostgreSQL)]
   API --> Redis[(Redis)]
-  Redis --> Bull[BullMQ workers in-process]
+  Redis --> Bull[BullMQ — processo worker]
   API --> MP[Mercado Pago PIX]
   API --> Stripe[Stripe Billing]
+  Worker[Nest worker.ts] --> Redis
+  Worker --> PG
   Bull --> Email[SMTP]
   Bull --> WA[WhatsApp Evolution / wa.me]
 ```
 
+`PROCESS_ROLE=api|worker|all` — ver [`PERFORMANCE.md`](./PERFORMANCE.md).
 ## Monorepo
 
 ```
@@ -97,6 +100,6 @@ agenda-pro/
 |------------|-------------------|
 | API | Sim (stateless + JWT) |
 | Web | Sim (standalone Docker / Vercel) |
-| Worker | Hoje in-process; compose prevê worker separado (pedido B-13) |
+| Worker | Processo dedicado (`worker.ts` + compose `worker`); `PROCESS_ROLE` |
 | Postgres | Vertical + índices; particionar só com volume |
 | Redis | Cache + filas; ready falha se Redis down |

@@ -1,6 +1,11 @@
+'use client';
+
 import {
   cloneElement,
   isValidElement,
+  useEffect,
+  useId,
+  useRef,
   type ButtonHTMLAttributes,
   type InputHTMLAttributes,
   type ReactElement,
@@ -28,7 +33,7 @@ const buttonVariants: Record<NonNullable<ButtonProps['variant']>, string> = {
 };
 
 const buttonSizes: Record<NonNullable<ButtonProps['size']>, string> = {
-  sm: 'min-h-9 rounded-lg px-3 py-2 text-xs',
+  sm: 'min-h-11 rounded-lg px-3.5 py-2 text-sm',
   md: 'min-h-11 rounded-xl px-4 py-2.5 text-sm',
   lg: 'min-h-12 rounded-2xl px-6 py-3.5 text-sm',
 };
@@ -102,7 +107,7 @@ export function Field({ label, id, hint, error, children }: FieldProps) {
 }
 
 const controlClass =
-  'w-full min-h-11 rounded-xl border border-line bg-white px-3.5 py-2.5 text-sm text-ink placeholder:text-muted-soft shadow-[inset_0_1px_0_rgba(255,255,255,0.7)] transition focus:border-mint-deep focus:outline-none focus:ring-4 focus:ring-mint-deep/10 disabled:bg-paper-2';
+  'w-full min-h-11 rounded-xl border border-line bg-white px-3.5 py-2.5 text-sm text-ink placeholder:text-muted-soft shadow-[inset_0_1px_0_rgba(255,255,255,0.7)] transition focus-visible:border-mint-deep focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-mint-deep/40 disabled:bg-paper-2';
 
 export function Input({ className = '', id, ...props }: InputHTMLAttributes<HTMLInputElement>) {
   return <input id={id} className={`${controlClass} ${className}`} {...props} />;
@@ -304,6 +309,15 @@ export function Stars({ value, size = 'sm' }: { value: number; size?: 'sm' | 'lg
   );
 }
 
+function getFocusable(container: HTMLElement): HTMLElement[] {
+  const nodes = container.querySelectorAll<HTMLElement>(
+    'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
+  );
+  return Array.from(nodes).filter(
+    (el) => !el.hasAttribute('disabled') && el.getAttribute('aria-hidden') !== 'true',
+  );
+}
+
 export function Modal({
   title,
   onClose,
@@ -313,13 +327,57 @@ export function Modal({
   onClose: () => void;
   children: ReactNode;
 }) {
+  const titleId = useId();
+  const panelRef = useRef<HTMLDivElement>(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
+  useEffect(() => {
+    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    const panel = panelRef.current;
+    const focusable = panel ? getFocusable(panel) : [];
+    (focusable[0] ?? panel)?.focus();
+
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        onCloseRef.current();
+        return;
+      }
+      if (e.key !== 'Tab' || !panelRef.current) return;
+      const items = getFocusable(panelRef.current);
+      if (items.length === 0) {
+        e.preventDefault();
+        panelRef.current.focus();
+        return;
+      }
+      const first = items[0];
+      const last = items[items.length - 1];
+      const active = document.activeElement;
+      if (e.shiftKey) {
+        if (active === first || !panelRef.current.contains(active)) {
+          e.preventDefault();
+          last.focus();
+        }
+      } else if (active === last || !panelRef.current.contains(active)) {
+        e.preventDefault();
+        first.focus();
+      }
+    }
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      document.body.style.overflow = prevOverflow;
+      previous?.focus();
+    };
+  }, []);
+
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="modal-title"
-    >
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <button
         type="button"
         className="absolute inset-0 cursor-default bg-ink/55 backdrop-blur-[2px]"
@@ -327,9 +385,16 @@ export function Modal({
         aria-label="Fechar janela"
         tabIndex={-1}
       />
-      <div className="relative max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl bg-white p-6 shadow-[var(--shadow-modal)]">
+      <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        tabIndex={-1}
+        className="relative max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl bg-white p-6 shadow-[var(--shadow-modal)] outline-none"
+      >
         <div className="flex items-start justify-between gap-4">
-          <h2 id="modal-title" className="font-display text-lg font-semibold text-ink">
+          <h2 id={titleId} className="font-display text-lg font-semibold text-ink">
             {title}
           </h2>
           <button
@@ -361,7 +426,7 @@ export function StatCard({
   return (
     <div className={`rounded-2xl p-5 ${accent ? 'bg-ink text-white' : 'surface-elevated'}`}>
       <p
-        className={`text-[11px] font-semibold uppercase tracking-[0.14em] ${accent ? 'text-white/55' : 'text-muted'}`}
+        className={`text-xs font-semibold uppercase tracking-[0.14em] ${accent ? 'text-white/70' : 'text-muted'}`}
       >
         {label}
       </p>
@@ -371,7 +436,7 @@ export function StatCard({
         {value}
       </div>
       {hint ? (
-        <div className={`mt-2 text-sm ${accent ? 'text-white/65' : 'text-muted'}`}>{hint}</div>
+        <div className={`mt-2 text-sm ${accent ? 'text-white/75' : 'text-muted'}`}>{hint}</div>
       ) : null}
     </div>
   );

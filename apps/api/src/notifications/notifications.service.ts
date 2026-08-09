@@ -11,6 +11,7 @@ import { EnvService } from '../config/env.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { WhatsAppProvider } from './whatsapp.provider';
 import { planAllowsWhatsappReminders } from '../billing/plan-entitlements';
+import { isTokenHash } from '../common/crypto/tokens';
 
 const QUEUE_NAME = 'notifications';
 
@@ -41,12 +42,19 @@ export class NotificationsService implements OnModuleDestroy {
   private bootstrapQueue() {
     try {
       this.queue = new Queue(QUEUE_NAME, { connection: this.connection });
-      this.worker = new Worker(QUEUE_NAME, async (job) => this.processJob(job), {
-        connection: this.connection,
-      });
-      this.worker.on('failed', (job, err) => {
-        this.logger.error(`Job ${job?.id} failed: ${err.message}`);
-      });
+      // Worker só no processo background (`PROCESS_ROLE=worker|all`). API só enfileira.
+      if (this.env.runsBackgroundJobs) {
+        this.worker = new Worker(QUEUE_NAME, async (job) => this.processJob(job), {
+          connection: this.connection,
+        });
+        this.worker.on('failed', (job, err) => {
+          this.logger.error(`Job ${job?.id} failed: ${err.message}`);
+        });
+      } else {
+        this.logger.log(
+          'BullMQ Worker desligado neste processo (PROCESS_ROLE=api). Rode o worker.',
+        );
+      }
     } catch (error) {
       this.logger.warn(
         `Fila BullMQ indisponível (${(error as Error).message}). Jobs ficam só no banco.`,
@@ -63,6 +71,16 @@ export class NotificationsService implements OnModuleDestroy {
     return `${this.env.appPublicUrl}/agendamento/${manageToken}`;
   }
 
+  /**
+   * Raw na URL quando disponível; legado plaintext no DB ainda monta o link;
+   * hash-only sem raw → null (e-mail pede para usar o link já recebido).
+   */
+  private resolveManageUrl(storedManageToken: string, rawManageToken?: string): string | null {
+    if (rawManageToken) return this.manageUrl(rawManageToken);
+    if (!isTokenHash(storedManageToken)) return this.manageUrl(storedManageToken);
+    return null;
+  }
+
   private formatWhen(appointment: AppointmentWithRelations): string {
     return appointment.startsAt.toLocaleString('pt-BR', {
       timeZone: appointment.tenant.timezone,
@@ -75,7 +93,11 @@ export class NotificationsService implements OnModuleDestroy {
    * Confirmação imediata (e-mail) + lembretes com delay real na fila:
    * 24h e 2h antes do horário, por e-mail e WhatsApp.
    */
-  async enqueueBookingConfirmation(appointmentId: string) {
+  /**
+   * @param rawManageToken token em claro (só na URL). Obrigatório para incluir manage link
+   * quando `appointments.manageToken` já é hash SHA-256. Legado plaintext ainda funciona sem ele.
+   */
+  async enqueueBookingConfirmation(appointmentId: string, rawManageToken?: string) {
     const appointment = await this.prisma.appointment.findUnique({
       where: { id: appointmentId },
       include: { client: true, service: true, tenant: true, professional: true },
@@ -83,7 +105,10 @@ export class NotificationsService implements OnModuleDestroy {
     if (!appointment) return;
 
     const when = this.formatWhen(appointment);
-    const manageUrl = this.manageUrl(appointment.manageToken);
+    const manageUrl = this.resolveManageUrl(appointment.manageToken, rawManageToken);
+    const manageLines = manageUrl
+      ? ['', `Para confirmar presença, remarcar ou cancelar, use seu link exclusivo:`, manageUrl]
+      : ['', `Para remarcar ou cancelar, use o link exclusivo que você recebeu ao agendar.`];
 
     await this.createAndEnqueue({
       tenantId: appointment.tenantId,
@@ -98,9 +123,7 @@ export class NotificationsService implements OnModuleDestroy {
           '',
           `Seu horário está garantido: ${appointment.service.name} em ${when}.`,
           `Local: ${appointment.tenant.name}${appointment.tenant.address ? ` — ${appointment.tenant.address}` : ''}`,
-          '',
-          `Para confirmar presença, remarcar ou cancelar, use seu link exclusivo:`,
-          manageUrl,
+          ...manageLines,
         ].join('\n'),
         appointmentId: appointment.id,
       },
@@ -115,7 +138,9 @@ export class NotificationsService implements OnModuleDestroy {
       const reminderText =
         `Olá ${appointment.client.name}! Lembrete do seu horário em ${appointment.tenant.name}: ` +
         `${appointment.service.name} em ${when}. ` +
-        `Confirme ou remarque aqui: ${manageUrl}`;
+        (manageUrl
+          ? `Confirme ou remarque aqui: ${manageUrl}`
+          : `Use o link exclusivo que você recebeu ao agendar para confirmar ou remarcar.`);
 
       if (planAllowsWhatsappReminders(appointment.tenant.plan)) {
         await this.createAndEnqueue(
@@ -259,6 +284,26 @@ export class NotificationsService implements OnModuleDestroy {
     return `https://wa.me/${number}?text=${encodeURIComponent(text)}`;
   }
 
+  /**
+   * Marca jobs PENDING do agendamento como FAILED (não enviados).
+   * Usado no reschedule para não disparar lembretes do horário antigo.
+   * Jobs já em PROCESSING podem ainda completar (race aceitável).
+   */
+  async cancelPendingForAppointment(appointmentId: string): Promise<number> {
+    const result = await this.prisma.notificationJob.updateMany({
+      where: {
+        appointmentId,
+        status: NotificationJobStatus.PENDING,
+      },
+      data: {
+        status: NotificationJobStatus.FAILED,
+        lastError: 'Invalidated: appointment rescheduled or cancelled',
+        processedAt: new Date(),
+      },
+    });
+    return result.count;
+  }
+
   private async createAndEnqueue(
     data: {
       tenantId: string;
@@ -306,6 +351,7 @@ export class NotificationsService implements OnModuleDestroy {
       where: { id: job.data.notificationJobId },
     });
     if (!record || record.status === NotificationJobStatus.COMPLETED) return;
+    if (record.status === NotificationJobStatus.FAILED) return;
 
     // Lembrete de agendamento que já foi cancelado não deve ser enviado
     if (record.appointmentId && record.type === NotificationJobType.BOOKING_REMINDER) {

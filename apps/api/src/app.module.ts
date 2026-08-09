@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { ThrottlerStorageRedisService } from '@nest-lab/throttler-storage-redis';
 import { APP_GUARD } from '@nestjs/core';
 import { LoggerModule } from 'nestjs-pino';
 import { AccountModule } from './account/account.module';
@@ -11,6 +12,7 @@ import { BillingModule } from './billing/billing.module';
 import { ClientsModule } from './clients/clients.module';
 import { CommonModule } from './common/common.module';
 import { EnvModule } from './config/env.module';
+import { EnvService } from './config/env.service';
 import { validateEnv } from './config/env.validation';
 import { HealthModule } from './health/health.module';
 import { NotificationsModule } from './notifications/notifications.module';
@@ -51,12 +53,25 @@ import { WaitlistModule } from './waitlist/waitlist.module';
         },
       },
     }),
-    ThrottlerModule.forRoot([
-      {
-        ttl: 60_000,
-        limit: 120,
-      },
-    ]),
+    /**
+     * Rate limit compartilhado via Redis (ioredis) — contadores consistentes
+     * entre réplicas. Sem Redis saudável no boot, o storage ainda aponta ao URL;
+     * readiness já falha fechado se Redis estiver down.
+     */
+    ThrottlerModule.forRootAsync({
+      imports: [EnvModule],
+      inject: [EnvService],
+      useFactory: (env: EnvService) => ({
+        throttlers: [
+          {
+            name: 'default',
+            ttl: 60_000,
+            limit: 120,
+          },
+        ],
+        storage: new ThrottlerStorageRedisService(env.redisUrl),
+      }),
+    }),
     CommonModule,
     EnvModule,
     PrismaModule,

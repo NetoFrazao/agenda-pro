@@ -35,8 +35,11 @@ Copie de `.env.example`. Em produção gere segredos longos:
 1. New Project → Deploy from GitHub
 2. Add PostgreSQL + Redis
 3. Build: `npm install && npx prisma generate --schema apps/api/prisma/schema.prisma && npm run build -w @agenda-pro/api`
-4. Start: `npm run start:prod -w @agenda-pro/api`
-5. Release / migrate: `npm run db:migrate -w @agenda-pro/api`
+4. Start API: `PROCESS_ROLE=api npm run start:prod -w @agenda-pro/api`
+5. Start Worker (mesmo build): `PROCESS_ROLE=worker npm run start:worker -w @agenda-pro/api`
+6. Release / migrate (na raiz do monorepo): `npm run db:migrate`
+
+Compose prod-like já sobe `api` + `worker` (ver `docker-compose.prod.yml`).
 
 > Ajuste os paths se configurar o serviço com root em `apps/api`.
 

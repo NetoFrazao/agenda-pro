@@ -8,7 +8,8 @@ Fonte canônica de exemplos: [`.env.example`](../.env.example).
 | Variável | Descrição |
 |----------|-----------|
 | `POSTGRES_USER` / `PASSWORD` / `DB` / `PORT` | Credenciais do container Postgres |
-| `REDIS_PORT` | Porta host do Redis |
+| `REDIS_PORT` | Porta host do Redis (dev compose) |
+| `REDIS_PASSWORD` | **Obrigatório** em `docker-compose.prod.yml` (`--requirepass`). Dev compose sem AUTH. Preferir hex (`openssl rand -hex 32`). |
 
 ## API
 
@@ -18,7 +19,8 @@ Fonte canônica de exemplos: [`.env.example`](../.env.example).
 | `API_PORT` / `API_HOST` | Bind da API |
 | `DATABASE_URL` | Prisma; use `connection_limit` no query string |
 | `DATABASE_CONNECTION_LIMIT` | Documentação do pool (alinhar com URL) |
-| `REDIS_URL` | BullMQ + cache público |
+| `REDIS_URL` | BullMQ + cache; em prod compose: `redis://:${REDIS_PASSWORD}@redis:6379` |
+| `PROCESS_ROLE` | `all` (default) \| `api` \| `worker` — ver [PERFORMANCE.md](./PERFORMANCE.md) |
 | `JWT_ACCESS_SECRET` / `JWT_REFRESH_SECRET` | ≥ 32 chars em produção |
 | `JWT_ACCESS_TTL` / `JWT_REFRESH_TTL` | Ex.: `15m`, `7d` |
 | `CORS_ORIGIN` | Origem do Next (com credentials) |

@@ -300,8 +300,9 @@ model Appointment {
   startsAt       DateTime
   endsAt         DateTime
   status         AppointmentStatus @default(SCHEDULED)
-  /// Token secreto do link de auto-gestão do cliente (confirmar/cancelar/remarcar)
-  manageToken    String            @unique @default(cuid())
+  /// Hash SHA-256 (hex) do token de auto-gestão — raw só na URL/e-mail.
+  /// Legado pré-Fase1: cuid/md5 em plaintext (dual-read na API até expirar naturalmente).
+  manageToken    String            @unique
   /// Observação do cliente no momento do booking
   customerNotes  String?           @db.VarChar(500)
   /// Snapshot do preço no momento do agendamento (evita divergência se serviço mudar)
@@ -328,9 +329,8 @@ model Appointment {
   @@index([clientId])
   /// CRM metrics: groupBy clientId + status (page-scoped / segment rank)
   @@index([tenantId, clientId, status, startsAt])
-  /// Impede dois bookings exatamente no mesmo start para o mesmo profissional
-  /// (camada 1). Overlap parcial é tratado com transaction + lock na Fase 3.
-  @@unique([professionalId, startsAt])
+  /// Unique parcial ativos: migration `20260809270000_phase1_appointments_active_unique`
+  /// (CANCELLED/NO_SHOW/COMPLETED liberam o slot). Overlap parcial = lock na app.
   @@map("appointments")
 }
 

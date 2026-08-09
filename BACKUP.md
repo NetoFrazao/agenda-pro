@@ -57,11 +57,40 @@ powershell -File .\scripts\restore-postgres.ps1 -DumpFile backups\agenda-pro-XXX
 ## Checklist pós-backup
 
 - [ ] Arquivo não-vazio
-- [ ] Cópia off-host (S3/Backblaze/outro) — *manual nesta fase*
-- [ ] Restore testado em ambiente descartável ao menos 1×/mês
+- [ ] Cópia off-host (`BACKUP_OFFHOST_DIR` ou `-OffHostDir`) — **obrigatório para RPO contratado**
+- [ ] Restore drill: `npm run db:restore:drill -- -DumpFile backups\...` (ou `-Apply` em DB descartável)
+- [ ] Smoke `/api/health` + `/api/health/ready` após restore real
+
+### Off-host
+
+```powershell
+$env:BACKUP_OFFHOST_DIR = 'D:\backups-agenda-pro'  # ou mount S3/rclone
+npm run db:backup
+```
+
+Agendar no Windows Task Scheduler (diário) apontando para `scripts/backup-postgres.ps1`.
+
+### Restore drill
+
+```powershell
+npm run db:restore:drill -- -DumpFile backups\agenda-pro-XXXX.sql
+# Em staging descartável:
+powershell -File .\scripts\restore-drill.ps1 -DumpFile backups\agenda-pro-XXXX.sql -Apply
+```
+
+## Monitoramento de readiness
+
+```powershell
+$env:HEALTH_READY_URL = 'https://api.seudominio.com/api/health/ready'
+$env:HEALTH_ALERT_WEBHOOK_URL = 'https://hooks.slack.com/services/...'
+npm run ops:watch-ready
+```
+
+Agendar a cada 1–5 min. Alternativa: UptimeRobot/Better Stack HTTP 200 em `/api/health/ready`.
 
 ## O que não está coberto
 
-- Backup automático em Railway/Render (usar snapshots do provedor + este script como fallback)
-- Criptografia at-rest do arquivo local (cifrar antes de upload off-host)
-- Redis AOF/RDB (opcional; fila é reconstruível a partir do outbox — ver request Engineering M-06)
+- PITR / WAL archiving (ver `DISASTER-RECOVERY.md`)
+- Criptografia at-rest do dump (cifrar antes de upload cloud)
+- Redis AOF/RDB (fila reconstruível via outbox)
+- Upload S3 nativo (use `BACKUP_OFFHOST_DIR` + sync externo)

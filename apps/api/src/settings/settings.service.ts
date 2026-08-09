@@ -44,6 +44,7 @@ export class SettingsService {
       select: { slug: true },
     });
     await this.cache.invalidatePublicProfile(updated.slug);
+    await this.cache.invalidatePublicSlots(updated.slug);
     return this.get(tenantId);
   }
 
@@ -54,6 +55,7 @@ export class SettingsService {
       select: { slug: true },
     });
     await this.cache.invalidatePublicProfile(updated.slug);
+    await this.cache.invalidatePublicSlots(updated.slug);
     return this.get(tenantId);
   }
 

@@ -2,9 +2,9 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useEffect, useId, useState, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { api } from '@/lib/api';
-import { clearSessionFlag, hasSession } from '@/lib/auth';
+import { clearSessionFlag, setSessionFlag } from '@/lib/auth';
 import { BrandLogo } from './BrandLogo';
 import { Button, Spinner } from './ui';
 
@@ -35,14 +35,12 @@ export function AuthGuard({ children }: { children: ReactNode }) {
     let cancelled = false;
 
     async function probeSession() {
-      // A-06: flag localStorage é só hint; autoridade real = cookie via /auth/me
-      if (!hasSession()) {
-        router.replace('/login');
-        return;
-      }
+      // Cookie httpOnly é a autoridade; localStorage só é atualizado como hint UX.
       try {
         await api('/api/auth/me');
-        if (!cancelled) setReady(true);
+        if (cancelled) return;
+        setSessionFlag();
+        setReady(true);
       } catch {
         clearSessionFlag();
         if (!cancelled) router.replace('/login');
@@ -70,6 +68,8 @@ export function DashboardShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const navId = useId();
+  const navRef = useRef<HTMLElement>(null);
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
 
@@ -79,19 +79,50 @@ export function DashboardShell({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!menuOpen) return;
-    function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') setMenuOpen(false);
-    }
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [menuOpen]);
-
-  useEffect(() => {
-    if (!menuOpen) return;
-    const prev = document.body.style.overflow;
+    const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
+
+    const nav = navRef.current;
+    const firstLink = nav?.querySelector<HTMLElement>('a, button');
+    firstLink?.focus();
+
+    function focusables(): HTMLElement[] {
+      if (!navRef.current) return [];
+      return Array.from(
+        navRef.current.querySelectorAll<HTMLElement>('a[href], button:not([disabled])'),
+      );
+    }
+
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setMenuOpen(false);
+        menuButtonRef.current?.focus();
+        return;
+      }
+      if (e.key !== 'Tab' || !navRef.current) return;
+      // Mobile drawer only: trap focus while open (md+ nav is always visible).
+      if (window.matchMedia('(min-width: 768px)').matches) return;
+      const items = focusables();
+      if (items.length === 0) return;
+      const first = items[0];
+      const last = items[items.length - 1];
+      const active = document.activeElement;
+      if (e.shiftKey) {
+        if (active === first || !navRef.current.contains(active)) {
+          e.preventDefault();
+          last.focus();
+        }
+      } else if (active === last || !navRef.current.contains(active)) {
+        e.preventDefault();
+        first.focus();
+      }
+    }
+
+    window.addEventListener('keydown', onKey);
     return () => {
-      document.body.style.overflow = prev;
+      window.removeEventListener('keydown', onKey);
+      document.body.style.overflow = prevOverflow;
     };
   }, [menuOpen]);
 
@@ -127,6 +158,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
             <div className="flex items-center justify-between gap-3 px-5 py-4 md:py-5">
               <BrandLogo href="/dashboard" size="sm" />
               <button
+                ref={menuButtonRef}
                 type="button"
                 className="touch-target inline-flex items-center justify-center rounded-xl px-3 text-sm font-medium text-ink-muted ring-1 ring-line md:hidden"
                 aria-expanded={menuOpen}
@@ -137,6 +169,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
               </button>
             </div>
             <nav
+              ref={navRef}
               id={navId}
               aria-label="Dashboard"
               className={`${menuOpen ? 'block' : 'hidden'} max-h-[min(70vh,28rem)] space-y-0.5 overflow-y-auto px-3 pb-5 md:block md:max-h-none`}

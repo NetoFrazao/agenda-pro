@@ -8,13 +8,15 @@ import {
 } from './appointment-state';
 
 describe('appointment-state (M-03)', () => {
-  it('PENDING_PAYMENT → CONFIRMED | SCHEDULED | CANCELLED', () => {
-    expect(allowedTransitions(AppointmentStatus.PENDING_PAYMENT)).toEqual(
-      expect.arrayContaining([
-        AppointmentStatus.CONFIRMED,
-        AppointmentStatus.SCHEDULED,
-        AppointmentStatus.CANCELLED,
-      ]),
+  it('PENDING_PAYMENT → só CANCELLED (CONFIRMED via webhook/confirmPaid)', () => {
+    expect(allowedTransitions(AppointmentStatus.PENDING_PAYMENT)).toEqual([
+      AppointmentStatus.CANCELLED,
+    ]);
+    expect(canTransition(AppointmentStatus.PENDING_PAYMENT, AppointmentStatus.CONFIRMED)).toBe(
+      false,
+    );
+    expect(canTransition(AppointmentStatus.PENDING_PAYMENT, AppointmentStatus.SCHEDULED)).toBe(
+      false,
     );
     expect(canTransition(AppointmentStatus.PENDING_PAYMENT, AppointmentStatus.COMPLETED)).toBe(
       false,

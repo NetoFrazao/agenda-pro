@@ -111,6 +111,21 @@ export class EnvService {
     return this.config.get('MERCADOPAGO_WEBHOOK_SECRET', { infer: true });
   }
 
+  /** `all` | `api` | `worker` — ver `env.validation` / docs PERFORMANCE. */
+  get processRole() {
+    return this.config.get('PROCESS_ROLE', { infer: true });
+  }
+
+  /** HTTP server (main.ts). */
+  get runsHttp() {
+    return this.processRole === 'all' || this.processRole === 'api';
+  }
+
+  /** BullMQ Worker + reconcile PIX (worker.ts ou all). */
+  get runsBackgroundJobs() {
+    return this.processRole === 'all' || this.processRole === 'worker';
+  }
+
   /** Preços placeholder por plano (centavos). Não hardcodar no código de domínio. */
   get planPricesCents() {
     return {

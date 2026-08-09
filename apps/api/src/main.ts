@@ -18,6 +18,12 @@ async function bootstrap() {
 
   const env = app.get(EnvService);
 
+  if (!env.runsHttp) {
+    throw new Error(
+      `PROCESS_ROLE=${env.processRole} não sobe HTTP. Use entrypoint worker.ts (PROCESS_ROLE=worker|all).`,
+    );
+  }
+
   app.use(helmet());
   app.use(cookieParser());
   app.enableCors({

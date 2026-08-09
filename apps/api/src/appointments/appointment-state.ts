@@ -5,12 +5,12 @@ import { AppointmentStatus } from '@prisma/client';
  * Máquina de estados de Appointment (M-03).
  * Transições inválidas (ex.: CANCELLED→COMPLETED) distorcem loyalty e relatórios.
  */
+/**
+ * PENDING_PAYMENT → CONFIRMED só via PixLifecycleService.confirmPaid (fora da FSM).
+ * Cliente/staff não podem furar o sinal com confirmByToken / updateStatus.
+ */
 const TRANSITIONS: Record<AppointmentStatus, readonly AppointmentStatus[]> = {
-  [AppointmentStatus.PENDING_PAYMENT]: [
-    AppointmentStatus.CONFIRMED,
-    AppointmentStatus.SCHEDULED,
-    AppointmentStatus.CANCELLED,
-  ],
+  [AppointmentStatus.PENDING_PAYMENT]: [AppointmentStatus.CANCELLED],
   [AppointmentStatus.SCHEDULED]: [
     AppointmentStatus.CONFIRMED,
     AppointmentStatus.CANCELLED,

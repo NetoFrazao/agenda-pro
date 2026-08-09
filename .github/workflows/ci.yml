@@ -90,7 +90,10 @@ jobs:
           NEXT_PUBLIC_API_URL: http://localhost:3001
           NEXT_PUBLIC_APP_URL: http://localhost:3000
 
-      - name: Dependency audit (high+)
+      # Soft-fail consciente: highs restantes exigem next@16 (postcss/sharp) ou
+      # bump transitivo @nestjs/swagger→js-yaml. Gate duro quebraria o CI sem
+      # upgrade coordenado. Ver SCORECARD_DEVOPS.md / DEPLOYMENT.md.
+      - name: Dependency audit (high+; advisory)
         run: npm audit --audit-level=high
         continue-on-error: true
 
@@ -104,3 +107,18 @@ jobs:
 
       - name: Build API image
         run: docker build -f apps/api/Dockerfile -t agenda-pro-api:ci .
+
+  docker-web:
+    name: Docker build Web
+    runs-on: ubuntu-latest
+    needs: lint-and-test
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build Web image
+        run: >-
+          docker build -f apps/web/Dockerfile
+          --build-arg NEXT_PUBLIC_API_URL=http://localhost:3001
+          --build-arg NEXT_PUBLIC_APP_URL=http://localhost:3000
+          -t agenda-pro-web:ci .

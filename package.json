@@ -11,6 +11,7 @@
     "dev": "npm run dev --workspaces --if-present",
     "dev:api": "npm run dev -w @agenda-pro/api",
     "dev:web": "npm run dev -w @agenda-pro/web",
+    "start:worker": "npm run start:worker -w @agenda-pro/api",
     "build": "npm run build --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md,yml,yaml}\"",
@@ -26,7 +27,9 @@
     "docker:prod:up": "docker compose -f docker-compose.prod.yml --env-file .env up -d --build",
     "docker:prod:down": "docker compose -f docker-compose.prod.yml down",
     "db:backup": "powershell -ExecutionPolicy Bypass -File ./scripts/backup-postgres.ps1",
-    "db:backup:dry": "powershell -ExecutionPolicy Bypass -File ./scripts/backup-postgres.ps1 -DryRun"
+    "db:backup:dry": "powershell -ExecutionPolicy Bypass -File ./scripts/backup-postgres.ps1 -DryRun",
+    "db:restore:drill": "powershell -ExecutionPolicy Bypass -File ./scripts/restore-drill.ps1",
+    "ops:watch-ready": "powershell -ExecutionPolicy Bypass -File ./scripts/watch-ready.ps1"
   },
   "engines": {
     "node": ">=20"

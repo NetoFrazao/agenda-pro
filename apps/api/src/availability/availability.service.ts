@@ -1,10 +1,14 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { RedisCacheService } from '../common/cache/redis-cache.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateAvailabilityExceptionDto, CreateAvailabilityRuleDto } from './dto/availability.dto';
 
 @Injectable()
 export class AvailabilityService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cache: RedisCacheService,
+  ) {}
 
   listRules(tenantId: string) {
     return this.prisma.availabilityRule.findMany({
@@ -18,7 +22,7 @@ export class AvailabilityService {
       throw new BadRequestException('endMinute deve ser maior que startMinute');
     }
     const professionalId = await this.resolveProfessionalId(tenantId, dto.professionalId, userId);
-    return this.prisma.availabilityRule.create({
+    const created = await this.prisma.availabilityRule.create({
       data: {
         tenantId,
         professionalId,
@@ -27,6 +31,8 @@ export class AvailabilityService {
         endMinute: dto.endMinute,
       },
     });
+    await this.invalidateSlots(tenantId);
+    return created;
   }
 
   async deleteRule(tenantId: string, id: string) {
@@ -37,6 +43,7 @@ export class AvailabilityService {
       throw new NotFoundException('Regra não encontrada');
     }
     await this.prisma.availabilityRule.delete({ where: { id } });
+    await this.invalidateSlots(tenantId);
     return { ok: true };
   }
 
@@ -70,7 +77,7 @@ export class AvailabilityService {
       }
     }
 
-    return this.prisma.availabilityException.create({
+    const created = await this.prisma.availabilityException.create({
       data: {
         tenantId,
         professionalId: dto.professionalId
@@ -83,6 +90,8 @@ export class AvailabilityService {
         reason: dto.reason,
       },
     });
+    await this.invalidateSlots(tenantId);
+    return created;
   }
 
   async deleteException(tenantId: string, id: string) {
@@ -93,7 +102,15 @@ export class AvailabilityService {
       throw new NotFoundException('Exceção não encontrada');
     }
     await this.prisma.availabilityException.delete({ where: { id } });
+    await this.invalidateSlots(tenantId);
     return { ok: true };
+  }
+
+  private async invalidateSlots(tenantId: string) {
+    await this.cache.invalidatePublicSlotsByTenantId(tenantId, async (id) => {
+      const t = await this.prisma.tenant.findUnique({ where: { id }, select: { slug: true } });
+      return t?.slug ?? null;
+    });
   }
 
   /** Garante que professionalId pertence ao tenant (evita cross-tenant write). */

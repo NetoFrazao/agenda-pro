@@ -1,5 +1,6 @@
 import { Body, Controller, Get, Param, Patch, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiProperty, ApiPropertyOptional, ApiTags } from '@nestjs/swagger';
+import { UserRole } from '@prisma/client';
 import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
@@ -17,6 +18,8 @@ import {
 } from 'class-validator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AuthUser, CurrentUser } from '../common/decorators/current-user.decorator';
+import { Roles } from '../common/decorators/roles.decorator';
+import { RolesGuard } from '../common/decorators/roles.guard';
 import type { ClientSegment, InactiveBucket } from './client-segment';
 import { ClientsService } from './clients.service';
 
@@ -101,7 +104,7 @@ class UpdateClientProfileDto {
 
 @ApiTags('clients')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('clients')
 export class ClientsController {
   constructor(private readonly clients: ClientsService) {}
@@ -119,7 +122,9 @@ export class ClientsController {
     return this.clients.detail(user.tenantId, id);
   }
 
+  /** CRM writes (notas / LGPD consent / perfil) — só OWNER */
   @Patch(':id/notes')
+  @Roles(UserRole.OWNER)
   updateNotes(
     @CurrentUser() user: AuthUser,
     @Param('id') id: string,
@@ -129,6 +134,7 @@ export class ClientsController {
   }
 
   @Patch(':id/consent')
+  @Roles(UserRole.OWNER)
   updateConsent(
     @CurrentUser() user: AuthUser,
     @Param('id') id: string,
@@ -138,6 +144,7 @@ export class ClientsController {
   }
 
   @Patch(':id/profile')
+  @Roles(UserRole.OWNER)
   updateProfile(
     @CurrentUser() user: AuthUser,
     @Param('id') id: string,

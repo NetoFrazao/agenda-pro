@@ -7,6 +7,7 @@ import { ValidationPipe, type INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import * as request from 'supertest';
 import { AppModule } from '../src/app.module';
+import { hashToken } from '../src/common/crypto/tokens';
 import { PrismaService } from '../src/prisma/prisma.service';
 
 function cookieValue(res: request.Response, name: string): string | undefined {
@@ -158,7 +159,9 @@ describe('Booking público — concorrência (e2e)', () => {
       .post(`/api/public/appointments/${token}/confirm`)
       .expect(201);
 
-    const confirmed = await prisma.appointment.findUnique({ where: { manageToken: token } });
+    const confirmed = await prisma.appointment.findUnique({
+      where: { manageToken: hashToken(token!) },
+    });
     expect(confirmed?.status).toBe('CONFIRMED');
 
     await request(app.getHttpServer())
@@ -166,8 +169,46 @@ describe('Booking público — concorrência (e2e)', () => {
       .send({})
       .expect(201);
 
-    const cancelled = await prisma.appointment.findUnique({ where: { manageToken: token } });
+    const cancelled = await prisma.appointment.findUnique({
+      where: { manageToken: hashToken(token!) },
+    });
     expect(cancelled?.status).toBe('CANCELLED');
+  });
+
+  it('PENDING_PAYMENT: confirm público é bloqueado sem PIX PAID', async () => {
+    const owner = await prisma.user.findFirst({ where: { tenantId, role: 'OWNER' } });
+    const client = await prisma.client.create({
+      data: { tenantId, name: 'PIX Pending', phone: '11955554444' },
+    });
+    const raw = `e2e-pending-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const appt = await prisma.appointment.create({
+      data: {
+        tenantId,
+        professionalId: owner!.id,
+        clientId: client.id,
+        serviceId,
+        startsAt: new Date(Date.now() + 3 * 86_400_000),
+        endsAt: new Date(Date.now() + 3 * 86_400_000 + 30 * 60_000),
+        status: 'PENDING_PAYMENT',
+        manageToken: hashToken(raw),
+        priceCentsSnapshot: 5000,
+        durationMinutesSnapshot: 30,
+      },
+    });
+    await prisma.pixCharge.create({
+      data: {
+        tenantId,
+        appointmentId: appt.id,
+        amountCents: 1000,
+        status: 'PENDING',
+        expiresAt: new Date(Date.now() + 30 * 60_000),
+      },
+    });
+
+    await request(app.getHttpServer()).post(`/api/public/appointments/${raw}/confirm`).expect(400);
+
+    const still = await prisma.appointment.findUnique({ where: { id: appt.id } });
+    expect(still?.status).toBe('PENDING_PAYMENT');
   });
 
   it('isolamento cross-tenant: tenant B não lê/altera cliente nem serviço de A', async () => {
@@ -267,6 +308,7 @@ describe('Booking público — concorrência (e2e)', () => {
         startsAt: new Date(Date.now() + 7 * 86_400_000),
         endsAt: new Date(Date.now() + 7 * 86_400_000 + 30 * 60_000),
         status: 'SCHEDULED',
+        manageToken: hashToken(`e2e-fsm-${Date.now()}`),
         priceCentsSnapshot: 5000,
         durationMinutesSnapshot: 30,
       },

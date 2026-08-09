@@ -8,6 +8,7 @@
     "build": "nest build",
     "start": "node dist/main.js",
     "start:prod": "node dist/main.js",
+    "start:worker": "node dist/worker.js",
     "lint": "eslint \"{src,test,prisma}/**/*.{ts,js}\" --max-warnings=0",
     "test": "jest --passWithNoTests",
     "test:watch": "jest --watch",
@@ -20,6 +21,7 @@
     "prisma:seed": "tsx --env-file=.env --env-file=../../.env prisma/seed.ts"
   },
   "dependencies": {
+    "@nest-lab/throttler-storage-redis": "^1.2.0",
     "@nestjs/common": "^11.0.7",
     "@nestjs/config": "^4.0.0",
     "@nestjs/core": "^11.0.7",

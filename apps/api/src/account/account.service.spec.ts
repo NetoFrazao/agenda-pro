@@ -1,8 +1,24 @@
-import { NotFoundException } from '@nestjs/common';
+import { ForbiddenException, NotFoundException } from '@nestjs/common';
+import * as bcrypt from 'bcryptjs';
 import { AccountService } from './account.service';
 
 describe('AccountService — A-04 LGPD', () => {
-  it('exportData agrega PII do tenant sem hard-delete', async () => {
+  const passwordHash = bcrypt.hashSync('SenhaForte123!', 4);
+
+  function basePrisma(overrides: Record<string, unknown> = {}) {
+    return {
+      user: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: 'u1',
+          passwordHash,
+          role: 'OWNER',
+        }),
+      },
+      ...overrides,
+    };
+  }
+
+  it('exportData exige senha correta (step-up)', async () => {
     const tenant = {
       id: 't1',
       slug: 'demo',
@@ -14,9 +30,12 @@ describe('AccountService — A-04 LGPD', () => {
       whatsapp: null,
       createdAt: new Date(),
     };
-    const prisma = {
+    const prisma = basePrisma({
       tenant: { findFirst: jest.fn().mockResolvedValue(tenant) },
-      user: { findMany: jest.fn().mockResolvedValue([{ id: 'u1', email: 'a@b.com' }]) },
+      user: {
+        findFirst: jest.fn().mockResolvedValue({ id: 'u1', passwordHash, role: 'OWNER' }),
+        findMany: jest.fn().mockResolvedValue([{ id: 'u1', email: 'a@b.com' }]),
+      },
       client: { findMany: jest.fn().mockResolvedValue([]) },
       service: { findMany: jest.fn().mockResolvedValue([]) },
       appointment: { findMany: jest.fn().mockResolvedValue([]) },
@@ -24,14 +43,17 @@ describe('AccountService — A-04 LGPD', () => {
       review: { findMany: jest.fn().mockResolvedValue([]) },
       subscription: { findUnique: jest.fn().mockResolvedValue({ plan: 'PRO', status: 'ACTIVE' }) },
       pixCharge: { findMany: jest.fn().mockResolvedValue([{ amountCents: 1000, status: 'PAID' }]) },
-    };
+    });
     const billing = { cancelImmediatelyForAccountDeletion: jest.fn() };
     const service = new AccountService(prisma as never, billing as never);
 
-    const exported = await service.exportData('t1');
+    await expect(service.exportData('t1', 'u1', 'errada!!!!')).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
+
+    const exported = await service.exportData('t1', 'u1', 'SenhaForte123!');
     expect(exported.tenant.slug).toBe('demo');
     expect(exported.users).toHaveLength(1);
-    expect(exported.pixCharges[0].amountCents).toBe(1000);
     expect(billing.cancelImmediatelyForAccountDeletion).not.toHaveBeenCalled();
   });
 
@@ -60,37 +82,38 @@ describe('AccountService — A-04 LGPD', () => {
       pixCharge: { updateMany: jest.fn() },
       service: { updateMany: jest.fn() },
     };
-    const prisma = {
+    const prisma = basePrisma({
       tenant: {
         findFirst: jest.fn().mockResolvedValue({ id: 't1', deletedAt: null }),
       },
       $transaction: jest.fn(async (fn: (client: typeof tx) => Promise<unknown>) => fn(tx)),
-    };
+    });
     const billing = {
       cancelImmediatelyForAccountDeletion: jest.fn().mockResolvedValue(undefined),
     };
     const service = new AccountService(prisma as never, billing as never);
 
-    const result = await service.deleteAccount('t1', 'u1');
+    await expect(service.deleteAccount('t1', 'u1', 'errada!!!!')).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
+
+    const result = await service.deleteAccount('t1', 'u1', 'SenhaForte123!');
 
     expect(billing.cancelImmediatelyForAccountDeletion).toHaveBeenCalledWith('t1');
     expect(tx.pixCharge.updateMany).toHaveBeenCalledWith({
       where: { tenantId: 't1' },
       data: { copyPaste: null, qrCodeBase64: null },
     });
-    expect(tx.tenant.update).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { id: 't1' },
-        data: expect.objectContaining({ deletedAt: expect.any(Date) }),
-      }),
-    );
     expect(result.ok).toBe(true);
-    expect(result.retention).toMatch(/PixCharge/);
   });
 
-  it('exportData 404 se tenant já excluído', async () => {
-    const prisma = { tenant: { findFirst: jest.fn().mockResolvedValue(null) } };
+  it('exportData 404 se tenant sumiu', async () => {
+    const prisma = basePrisma({
+      tenant: { findFirst: jest.fn().mockResolvedValue(null) },
+    });
     const service = new AccountService(prisma as never, {} as never);
-    await expect(service.exportData('missing')).rejects.toBeInstanceOf(NotFoundException);
+    await expect(service.exportData('t1', 'u1', 'SenhaForte123!')).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
   });
 });

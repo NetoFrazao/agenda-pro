@@ -1,13 +1,16 @@
 import { Body, Controller, Get, Param, Patch, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { UserRole } from '@prisma/client';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AuthUser, CurrentUser } from '../common/decorators/current-user.decorator';
+import { Roles } from '../common/decorators/roles.decorator';
+import { RolesGuard } from '../common/decorators/roles.guard';
 import { AppointmentsService } from './appointments.service';
 import { ListAppointmentsQueryDto, UpdateAppointmentStatusDto } from './dto/appointment.dto';
 
 @ApiTags('appointments')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('appointments')
 export class AppointmentsController {
   constructor(private readonly appointments: AppointmentsService) {}
@@ -23,7 +26,9 @@ export class AppointmentsController {
     });
   }
 
+  /** Staff (OWNER/MEMBER) pode operar status; FSM + gate PIX bloqueiam furo de sinal. */
   @Patch(':id/status')
+  @Roles(UserRole.OWNER, UserRole.MEMBER)
   updateStatus(
     @CurrentUser() user: AuthUser,
     @Param('id') id: string,
