@@ -65,7 +65,7 @@ function ResetPasswordForm() {
     return (
       <div className="space-y-4">
         <Alert tone="success">Senha redefinida com sucesso.</Alert>
-        <Link href="/login" className="text-sm font-semibold text-teal-800 hover:underline">
+        <Link href="/login" className="text-sm font-semibold text-mint-deep hover:underline">
           Ir para o login
         </Link>
       </div>

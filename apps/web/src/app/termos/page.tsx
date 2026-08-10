@@ -10,12 +10,12 @@ export default function TermosPage() {
     <div className="flex min-h-screen flex-col bg-atmosphere">
       <SiteHeader />
       <main className="mx-auto w-full max-w-3xl flex-1 px-6 py-12 sm:px-10">
-        <h1 className="font-display text-4xl font-semibold text-stone-900">Termos de Uso</h1>
-        <p className="mt-4 text-stone-600">Última atualização: agosto de 2026.</p>
+        <h1 className="font-display text-4xl font-semibold text-ink">Termos de Uso</h1>
+        <p className="mt-4 text-muted">Última atualização: agosto de 2026.</p>
 
-        <div className="mt-8 space-y-6 text-stone-700 leading-relaxed">
+        <div className="mt-8 space-y-6 text-ink-muted leading-relaxed">
           <section>
-            <h2 className="font-display text-xl font-semibold text-stone-900">1. Aceitação</h2>
+            <h2 className="font-display text-xl font-semibold text-ink">1. Aceitação</h2>
             <p className="mt-2">
               Ao criar uma conta ou usar a Agenda Pro, você concorda com estes Termos. Se não
               concordar, não utilize o serviço.
@@ -23,7 +23,7 @@ export default function TermosPage() {
           </section>
 
           <section>
-            <h2 className="font-display text-xl font-semibold text-stone-900">2. O serviço</h2>
+            <h2 className="font-display text-xl font-semibold text-ink">2. O serviço</h2>
             <p className="mt-2">
               A Agenda Pro oferece ferramentas de agendamento online (página pública e painel) para
               profissionais e pequenos negócios. Recursos e limites variam conforme o plano
@@ -32,7 +32,7 @@ export default function TermosPage() {
           </section>
 
           <section>
-            <h2 className="font-display text-xl font-semibold text-stone-900">
+            <h2 className="font-display text-xl font-semibold text-ink">
               3. Conta e responsabilidades
             </h2>
             <ul className="mt-2 list-disc space-y-1 pl-5">
@@ -48,7 +48,7 @@ export default function TermosPage() {
           </section>
 
           <section>
-            <h2 className="font-display text-xl font-semibold text-stone-900">
+            <h2 className="font-display text-xl font-semibold text-ink">
               4. Planos e pagamento
             </h2>
             <p className="mt-2">
@@ -59,7 +59,7 @@ export default function TermosPage() {
           </section>
 
           <section>
-            <h2 className="font-display text-xl font-semibold text-stone-900">
+            <h2 className="font-display text-xl font-semibold text-ink">
               5. Disponibilidade
             </h2>
             <p className="mt-2">
@@ -69,7 +69,7 @@ export default function TermosPage() {
           </section>
 
           <section>
-            <h2 className="font-display text-xl font-semibold text-stone-900">
+            <h2 className="font-display text-xl font-semibold text-ink">
               6. Propriedade intelectual
             </h2>
             <p className="mt-2">
@@ -79,7 +79,7 @@ export default function TermosPage() {
           </section>
 
           <section>
-            <h2 className="font-display text-xl font-semibold text-stone-900">
+            <h2 className="font-display text-xl font-semibold text-ink">
               7. Limitação de responsabilidade
             </h2>
             <p className="mt-2">
@@ -90,7 +90,7 @@ export default function TermosPage() {
           </section>
 
           <section>
-            <h2 className="font-display text-xl font-semibold text-stone-900">8. Encerramento</h2>
+            <h2 className="font-display text-xl font-semibold text-ink">8. Encerramento</h2>
             <p className="mt-2">
               Você pode encerrar a conta a qualquer momento. Podemos suspender ou encerrar contas
               que violem estes Termos ou a legislação aplicável.
@@ -98,7 +98,7 @@ export default function TermosPage() {
           </section>
 
           <section>
-            <h2 className="font-display text-xl font-semibold text-stone-900">9. Foro</h2>
+            <h2 className="font-display text-xl font-semibold text-ink">9. Foro</h2>
             <p className="mt-2">
               Estes Termos são regidos pelas leis brasileiras. Fica eleito o foro da comarca do
               domicílio do usuário consumidor, ou outro foro competente conforme a legislação

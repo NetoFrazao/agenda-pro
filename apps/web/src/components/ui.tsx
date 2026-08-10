@@ -143,7 +143,7 @@ export function Alert({
 }) {
   const tones = {
     error: 'border-danger-border bg-danger-bg text-red-900',
-    success: 'border-success-border bg-success-bg text-teal-950',
+    success: 'border-success-border bg-success-bg text-mint-deep',
     info: 'border-line bg-white/70 text-ink-muted',
   };
   return (
@@ -266,7 +266,7 @@ export function PageSkeleton({
 }
 
 const badgeTones: Record<BadgeTone, string> = {
-  emerald: 'bg-teal-100 text-teal-950',
+  emerald: 'bg-success-bg text-mint-deep',
   sky: 'bg-sky-100 text-sky-950',
   amber: 'bg-amber-100 text-amber-950',
   red: 'bg-red-100 text-red-950',

@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { useAuth } from '@/components/AuthProvider';
 import {
   Alert,
   Badge,
@@ -17,7 +18,6 @@ import {
 import { api, ApiError } from '@/lib/api';
 import { formatBRL, formatDateTime, whatsappLink, type BadgeTone } from '@/lib/format';
 import type {
-  AuthUserPayload,
   ClientDetail,
   ClientListResponse,
   ClientSegment,
@@ -68,13 +68,13 @@ function inactiveLabel(bucket: InactiveBucket): string {
 }
 
 export default function ClientsPage() {
+  const { timezone, isMember } = useAuth();
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [segmentFilter, setSegmentFilter] = useState<'' | ClientSegment>('');
   const [inactiveFilter, setInactiveFilter] = useState<'' | `${InactiveBucket}`>('');
   const [page, setPage] = useState(1);
   const [data, setData] = useState<ClientListResponse | null>(null);
-  const [timezone, setTimezone] = useState<string | undefined>();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -99,12 +99,6 @@ export default function ClientsPage() {
     }, 350);
     return () => clearTimeout(t);
   }, [search]);
-
-  useEffect(() => {
-    void api<AuthUserPayload>('/api/auth/me')
-      .then((me) => setTimezone(me.tenant?.timezone))
-      .catch(() => null);
-  }, []);
 
   const loadList = useCallback(async () => {
     setLoading(true);
@@ -531,6 +525,17 @@ export default function ClientsPage() {
   }
 
   // ---- Lista ----
+  if (isMember) {
+    return (
+      <div className="animate-fade-up">
+        <PageTitle title="Clientes" description="CRM da base de clientes." />
+        <EmptyState title="Acesso restrito">
+          Membros da equipe veem apenas a própria agenda. O CRM completo fica com o dono da conta.
+        </EmptyState>
+      </div>
+    );
+  }
+
   return (
     <div className="animate-fade-up">
       <PageTitle

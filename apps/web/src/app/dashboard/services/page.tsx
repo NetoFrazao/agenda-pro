@@ -151,9 +151,9 @@ export default function ServicesPage() {
 
       <form
         onSubmit={onSubmit}
-        className="mb-10 space-y-4 rounded-lg bg-white/80 p-5 ring-1 ring-stone-200"
+        className="mb-10 space-y-4 surface-elevated rounded-2xl p-5"
       >
-        <h2 className="font-display text-lg font-semibold text-stone-900">
+        <h2 className="font-display text-lg font-semibold text-ink">
           {editingId ? 'Editar serviço' : 'Novo serviço'}
         </h2>
         <Field label="Nome" id="svc-name">
@@ -226,21 +226,21 @@ export default function ServicesPage() {
           {services.map((s) => (
             <li
               key={s.id}
-              className="flex flex-col gap-3 rounded-lg bg-white p-4 ring-1 ring-stone-200 sm:flex-row sm:items-center sm:justify-between"
+              className="flex flex-col gap-3 surface-elevated rounded-2xl p-4 sm:flex-row sm:items-center sm:justify-between"
             >
               <div>
-                <p className="font-semibold text-stone-900">
+                <p className="font-semibold text-ink">
                   {s.name}{' '}
                   {!s.isActive ? (
-                    <span className="text-xs font-medium text-stone-500">(inativo)</span>
+                    <span className="text-xs font-medium text-muted">(inativo)</span>
                   ) : null}
                 </p>
-                <p className="text-sm text-stone-600">
+                <p className="text-sm text-muted">
                   {s.durationMinutes} min · {formatBRL(s.priceCents)}
                   {(s.depositCents ?? 0) > 0 ? ` · sinal ${formatBRL(s.depositCents ?? 0)}` : ''}
                 </p>
                 {s.description ? (
-                  <p className="mt-1 text-sm text-stone-500">{s.description}</p>
+                  <p className="mt-1 text-sm text-muted">{s.description}</p>
                 ) : null}
               </div>
               <div className="flex flex-wrap gap-2">

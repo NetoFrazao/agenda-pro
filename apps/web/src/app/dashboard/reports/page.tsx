@@ -1,32 +1,42 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useAuth } from '@/components/AuthProvider';
 import { Alert, Button, EmptyState, Field, Input, PageTitle, Spinner } from '@/components/ui';
 import { api, ApiError } from '@/lib/api';
-import { formatBRL, formatPercent } from '@/lib/format';
+import {
+  firstDayOfMonthYmdInTimeZone,
+  formatBRL,
+  formatPercent,
+  todayYmdInTimeZone,
+  zonedDayBoundsIso,
+} from '@/lib/format';
 import type { ReportsSummary } from '@/lib/types';
 
-function firstDayOfMonthYmd(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
-}
-
-function todayYmdLocal(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
 export default function ReportsPage() {
-  const [from, setFrom] = useState(firstDayOfMonthYmd());
-  const [to, setTo] = useState(todayYmdLocal());
+  const { timezone } = useAuth();
+  const defaults = useMemo(
+    () => ({
+      from: firstDayOfMonthYmdInTimeZone(timezone),
+      to: todayYmdInTimeZone(timezone),
+    }),
+    [timezone],
+  );
+  const [from, setFrom] = useState(defaults.from);
+  const [to, setTo] = useState(defaults.to);
   const [data, setData] = useState<ReportsSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  useEffect(() => {
+    setFrom(defaults.from);
+    setTo(defaults.to);
+  }, [defaults]);
+
   async function load(rangeFrom = from, rangeTo = to) {
     setError(null);
-    const fromIso = new Date(`${rangeFrom}T00:00:00`).toISOString();
-    const toIso = new Date(`${rangeTo}T23:59:59`).toISOString();
+    const { fromIso } = zonedDayBoundsIso(rangeFrom, timezone);
+    const { toIso } = zonedDayBoundsIso(rangeTo, timezone);
     const summary = await api<ReportsSummary>(
       `/api/reports/summary?from=${encodeURIComponent(fromIso)}&to=${encodeURIComponent(toIso)}`,
     );
@@ -34,13 +44,13 @@ export default function ReportsPage() {
   }
 
   useEffect(() => {
-    void load()
+    void load(defaults.from, defaults.to)
       .catch((err) =>
         setError(err instanceof ApiError ? err.message : 'Erro ao carregar o relatório.'),
       )
       .finally(() => setLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [defaults.from, defaults.to, timezone]);
 
   async function applyFilter() {
     setLoading(true);
@@ -62,7 +72,7 @@ export default function ReportsPage() {
         description="Resumo financeiro e operacional do período (receita considera atendimentos concluídos)."
       />
 
-      <div className="mb-6 flex flex-col gap-3 rounded-lg bg-white/80 p-4 ring-1 ring-stone-200 sm:flex-row sm:items-end">
+      <div className="surface-elevated mb-6 flex flex-col gap-3 rounded-2xl p-4 sm:flex-row sm:items-end">
         <Field label="De" id="report-from">
           <Input
             id="report-from"
@@ -92,58 +102,58 @@ export default function ReportsPage() {
       ) : (
         <div className="space-y-10">
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <div className="rounded-lg bg-white/80 p-5 ring-1 ring-stone-200">
-              <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">
+            <div className="surface-elevated rounded-2xl p-5">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted">
                 Faturamento
               </p>
-              <p className="mt-2 font-display text-2xl text-stone-900">
+              <p className="mt-2 font-display text-2xl text-ink">
                 {formatBRL(totals.revenueCents)}
               </p>
-              <p className="mt-1 text-sm text-stone-600">{totals.completed} concluídos</p>
+              <p className="mt-1 text-sm text-muted">{totals.completed} concluídos</p>
             </div>
-            <div className="rounded-lg bg-white/80 p-5 ring-1 ring-stone-200">
-              <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">
+            <div className="surface-elevated rounded-2xl p-5">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted">
                 Ticket médio
               </p>
-              <p className="mt-2 font-display text-2xl text-stone-900">
+              <p className="mt-2 font-display text-2xl text-ink">
                 {formatBRL(totals.avgTicketCents)}
               </p>
-              <p className="mt-1 text-sm text-stone-600">por atendimento concluído</p>
+              <p className="mt-1 text-sm text-muted">por atendimento concluído</p>
             </div>
-            <div className="rounded-lg bg-white/80 p-5 ring-1 ring-stone-200">
-              <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">
+            <div className="surface-elevated rounded-2xl p-5">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted">
                 Taxa de no-show
               </p>
-              <p className="mt-2 font-display text-2xl text-stone-900">
+              <p className="mt-2 font-display text-2xl text-ink">
                 {formatPercent(totals.noShowRate)}
               </p>
-              <p className="mt-1 text-sm text-stone-600">{totals.noShow} faltas</p>
+              <p className="mt-1 text-sm text-muted">{totals.noShow} faltas</p>
             </div>
-            <div className="rounded-lg bg-white/80 p-5 ring-1 ring-stone-200">
-              <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">
+            <div className="surface-elevated rounded-2xl p-5">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted">
                 Novos clientes
               </p>
-              <p className="mt-2 font-display text-2xl text-stone-900">{totals.newClients}</p>
-              <p className="mt-1 text-sm text-stone-600">no período</p>
+              <p className="mt-2 font-display text-2xl text-ink">{totals.newClients}</p>
+              <p className="mt-1 text-sm text-muted">no período</p>
             </div>
           </div>
 
-          <p className="text-sm text-stone-600">
+          <p className="text-sm text-muted">
             {totals.appointments} agendamentos no período · {totals.completed} concluídos ·{' '}
             {totals.cancelled} cancelados · {totals.noShow} faltas
           </p>
 
           <section>
-            <h2 className="font-display text-xl font-semibold text-stone-900">Top serviços</h2>
+            <h2 className="font-display text-xl font-semibold text-ink">Top serviços</h2>
             {data.topServices.length === 0 ? (
               <div className="mt-4">
                 <EmptyState>Nenhum atendimento concluído no período.</EmptyState>
               </div>
             ) : (
-              <div className="mt-4 overflow-x-auto rounded-lg bg-white ring-1 ring-stone-200">
+              <div className="mt-4 overflow-x-auto rounded-2xl bg-white ring-1 ring-line">
                 <table className="w-full min-w-[28rem] text-left text-sm">
                   <thead>
-                    <tr className="border-b border-stone-200 text-xs uppercase tracking-wide text-stone-500">
+                    <tr className="border-b border-line text-xs uppercase tracking-wide text-muted">
                       <th scope="col" className="px-4 py-3 font-semibold">
                         Serviço
                       </th>
@@ -155,12 +165,12 @@ export default function ReportsPage() {
                       </th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-stone-100">
+                  <tbody className="divide-y divide-paper-2">
                     {data.topServices.map((s) => (
                       <tr key={s.serviceId}>
-                        <td className="px-4 py-3 font-medium text-stone-900">{s.name}</td>
-                        <td className="px-4 py-3 text-stone-700">{s.count}</td>
-                        <td className="px-4 py-3 text-stone-700">{formatBRL(s.revenueCents)}</td>
+                        <td className="px-4 py-3 font-medium text-ink">{s.name}</td>
+                        <td className="px-4 py-3 text-ink-muted">{s.count}</td>
+                        <td className="px-4 py-3 text-ink-muted">{formatBRL(s.revenueCents)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -170,16 +180,16 @@ export default function ReportsPage() {
           </section>
 
           <section>
-            <h2 className="font-display text-xl font-semibold text-stone-900">Por profissional</h2>
+            <h2 className="font-display text-xl font-semibold text-ink">Por profissional</h2>
             {data.byProfessional.length === 0 ? (
               <div className="mt-4">
                 <EmptyState>Nenhum atendimento concluído no período.</EmptyState>
               </div>
             ) : (
-              <div className="mt-4 overflow-x-auto rounded-lg bg-white ring-1 ring-stone-200">
+              <div className="mt-4 overflow-x-auto rounded-2xl bg-white ring-1 ring-line">
                 <table className="w-full min-w-[36rem] text-left text-sm">
                   <thead>
-                    <tr className="border-b border-stone-200 text-xs uppercase tracking-wide text-stone-500">
+                    <tr className="border-b border-line text-xs uppercase tracking-wide text-muted">
                       <th scope="col" className="px-4 py-3 font-semibold">
                         Profissional
                       </th>
@@ -194,15 +204,15 @@ export default function ReportsPage() {
                       </th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-stone-100">
+                  <tbody className="divide-y divide-paper-2">
                     {data.byProfessional.map((p) => (
                       <tr key={p.professionalId}>
-                        <td className="px-4 py-3 font-medium text-stone-900">{p.name}</td>
-                        <td className="px-4 py-3 text-stone-700">{p.completed}</td>
-                        <td className="px-4 py-3 text-stone-700">{formatBRL(p.revenueCents)}</td>
-                        <td className="px-4 py-3 text-stone-700">
+                        <td className="px-4 py-3 font-medium text-ink">{p.name}</td>
+                        <td className="px-4 py-3 text-ink-muted">{p.completed}</td>
+                        <td className="px-4 py-3 text-ink-muted">{formatBRL(p.revenueCents)}</td>
+                        <td className="px-4 py-3 text-ink-muted">
                           {formatBRL(p.commissionCents)}{' '}
-                          <span className="text-stone-400">({p.commissionPercent}%)</span>
+                          <span className="text-muted-soft">({p.commissionPercent}%)</span>
                         </td>
                       </tr>
                     ))}

@@ -178,21 +178,21 @@ export default function TeamPage() {
           {members.map((m) => (
             <li
               key={m.id}
-              className="flex flex-col gap-3 rounded-lg bg-white p-4 ring-1 ring-stone-200 sm:flex-row sm:items-center sm:justify-between"
+              className="flex flex-col gap-3 surface-elevated rounded-2xl p-4 sm:flex-row sm:items-center sm:justify-between"
             >
               <div>
-                <p className="flex flex-wrap items-center gap-2 font-semibold text-stone-900">
+                <p className="flex flex-wrap items-center gap-2 font-semibold text-ink">
                   {m.name}
                   <Badge tone={m.role === 'OWNER' ? 'emerald' : 'stone'}>
                     {m.role === 'OWNER' ? 'Dono' : 'Equipe'}
                   </Badge>
                   {!m.isActive ? <Badge tone="red">Inativo</Badge> : null}
                 </p>
-                <p className="mt-1 text-sm text-stone-600">
+                <p className="mt-1 text-sm text-muted">
                   {m.email}
                   {m.phone ? ` · ${m.phone}` : ''}
                 </p>
-                <p className="mt-1 text-sm text-stone-500">Comissão: {m.commissionPercent}%</p>
+                <p className="mt-1 text-sm text-muted">Comissão: {m.commissionPercent}%</p>
               </div>
               <div className="flex flex-wrap gap-2">
                 <Button type="button" variant="secondary" onClick={() => startEdit(m)}>
@@ -319,7 +319,7 @@ export default function TeamPage() {
                     setEditForm((f) => (f ? { ...f, isActive: e.target.checked } : f))
                   }
                 />
-                <label htmlFor="edit-active" className="text-sm font-medium text-stone-800">
+                <label htmlFor="edit-active" className="text-sm font-medium text-ink-soft">
                   Ativo (aparece na página pública e recebe agendamentos)
                 </label>
               </div>

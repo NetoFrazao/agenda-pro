@@ -4,6 +4,7 @@ import { FormEvent, useCallback, useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { BrandLogo } from '@/components/BrandLogo';
 import { PixBlock } from '@/components/pix';
+import { SlotListbox } from '@/components/SlotListbox';
 import {
   Alert,
   Button,
@@ -260,7 +261,7 @@ export default function ManageAppointmentPage() {
           </div>
           <dl className="mt-5 space-y-4 text-sm">
             <div>
-              <dt className="text-xs font-semibold uppercase tracking-wide text-[#6b736e]">
+              <dt className="text-xs font-semibold uppercase tracking-wide text-muted">
                 Quando
               </dt>
               <dd className="mt-1 font-medium text-ink">
@@ -268,28 +269,28 @@ export default function ManageAppointmentPage() {
               </dd>
             </div>
             <div>
-              <dt className="text-xs font-semibold uppercase tracking-wide text-[#6b736e]">
+              <dt className="text-xs font-semibold uppercase tracking-wide text-muted">
                 Profissional
               </dt>
               <dd className="mt-1 font-medium text-ink">{data.professional.name}</dd>
             </div>
             <div>
-              <dt className="text-xs font-semibold uppercase tracking-wide text-[#6b736e]">
+              <dt className="text-xs font-semibold uppercase tracking-wide text-muted">
                 Cliente
               </dt>
               <dd className="mt-1 font-medium text-ink">{data.client.name}</dd>
             </div>
             <div>
-              <dt className="text-xs font-semibold uppercase tracking-wide text-[#6b736e]">
+              <dt className="text-xs font-semibold uppercase tracking-wide text-muted">
                 Valor
               </dt>
-              <dd className="mt-1 font-display text-lg font-semibold text-teal-800">
+              <dd className="mt-1 font-display text-lg font-semibold text-mint-deep">
                 {formatBRL(data.priceCentsSnapshot)}
               </dd>
             </div>
             {data.tenant.address ? (
               <div>
-                <dt className="text-xs font-semibold uppercase tracking-wide text-[#6b736e]">
+                <dt className="text-xs font-semibold uppercase tracking-wide text-muted">
                   Endereço
                 </dt>
                 <dd className="mt-1 font-medium text-ink">{data.tenant.address}</dd>
@@ -313,7 +314,7 @@ export default function ManageAppointmentPage() {
           <section aria-label="Ações" className="surface-elevated rounded-2xl p-6">
             <h2 className="font-display text-lg font-semibold text-ink">Precisa mudar algo?</h2>
             {data.canCancel ? (
-              <p className="mt-2 text-sm text-[#6b736e]">
+              <p className="mt-2 text-sm text-muted">
                 Cancelamento e remarcação gratuitos até{' '}
                 <strong className="text-ink">
                   {formatDateTime(data.canCancelUntil, timezone)}
@@ -321,7 +322,7 @@ export default function ManageAppointmentPage() {
                 .
               </p>
             ) : (
-              <p className="mt-2 text-sm text-[#6b736e]">
+              <p className="mt-2 text-sm text-muted">
                 O prazo para cancelar ou remarcar online já passou ({data.tenant.cancelMinHours}h
                 antes do horário). Fale direto com o estabelecimento.
               </p>
@@ -368,7 +369,7 @@ export default function ManageAppointmentPage() {
             {cancelOpen ? (
               <form
                 onSubmit={cancelAppointment}
-                className="mt-5 space-y-4 rounded-xl bg-[#f1f4f0] p-5 ring-1 ring-[#d5dbd6]"
+                className="mt-5 space-y-4 rounded-xl bg-paper-2 p-5 ring-1 ring-line"
               >
                 <Field label="Motivo (opcional)" id="cancel-reason">
                   <Textarea
@@ -390,7 +391,7 @@ export default function ManageAppointmentPage() {
             ) : null}
 
             {rescheduleOpen ? (
-              <div className="mt-5 space-y-4 rounded-xl bg-[#f1f4f0] p-5 ring-1 ring-[#d5dbd6]">
+              <div className="mt-5 space-y-4 rounded-xl bg-paper-2 p-5 ring-1 ring-line">
                 <div className="max-w-xs">
                   <Field label="Nova data" id="new-date">
                     <Input
@@ -407,29 +408,14 @@ export default function ManageAppointmentPage() {
                 ) : slots.length === 0 ? (
                   <EmptyState>Nenhum horário livre neste dia. Tente outra data.</EmptyState>
                 ) : (
-                  <ul
+                  <SlotListbox
+                    slots={slots}
+                    value={newSlot}
+                    onChange={setNewSlot}
+                    timezone={timezone}
+                    label="Novos horários disponíveis"
                     className="grid grid-cols-3 gap-2 sm:grid-cols-4"
-                    role="listbox"
-                    aria-label="Novos horários disponíveis"
-                  >
-                    {slots.map((iso) => {
-                      const selected = newSlot === iso;
-                      return (
-                        <li key={iso}>
-                          <button
-                            type="button"
-                            role="option"
-                            aria-selected={selected}
-                            data-selected={selected}
-                            className="slot-chip w-full rounded-xl bg-white px-2 py-2.5 text-sm font-semibold text-ink ring-1 ring-[#d5dbd6] hover:ring-teal-700/40"
-                            onClick={() => setNewSlot(iso)}
-                          >
-                            {formatTime(iso, timezone)}
-                          </button>
-                        </li>
-                      );
-                    })}
-                  </ul>
+                  />
                 )}
                 <div className="flex flex-wrap gap-2">
                   <Button
@@ -454,7 +440,7 @@ export default function ManageAppointmentPage() {
             <div className="mt-3">
               <Stars value={data.review.rating} size="lg" />
               {data.review.comment ? (
-                <p className="mt-2 text-sm leading-relaxed text-[#3f4742]">{data.review.comment}</p>
+                <p className="mt-2 text-sm leading-relaxed text-ink-muted">{data.review.comment}</p>
               ) : null}
             </div>
           </section>

@@ -10,14 +10,14 @@ export default function PrivacidadePage() {
     <div className="flex min-h-screen flex-col bg-atmosphere">
       <SiteHeader />
       <main className="prose-stone mx-auto w-full max-w-3xl flex-1 px-6 py-12 sm:px-10">
-        <h1 className="font-display text-4xl font-semibold text-stone-900">
+        <h1 className="font-display text-4xl font-semibold text-ink">
           Política de Privacidade
         </h1>
-        <p className="mt-4 text-stone-600">Última atualização: agosto de 2026.</p>
+        <p className="mt-4 text-muted">Última atualização: agosto de 2026.</p>
 
-        <div className="mt-8 space-y-6 text-stone-700 leading-relaxed">
+        <div className="mt-8 space-y-6 text-ink-muted leading-relaxed">
           <section>
-            <h2 className="font-display text-xl font-semibold text-stone-900">1. Quem somos</h2>
+            <h2 className="font-display text-xl font-semibold text-ink">1. Quem somos</h2>
             <p className="mt-2">
               A Agenda Pro é uma plataforma de agendamentos para profissionais de beleza (barbeiros,
               manicures e negócios similares). Esta política descreve como tratamos dados pessoais
@@ -26,7 +26,7 @@ export default function PrivacidadePage() {
           </section>
 
           <section>
-            <h2 className="font-display text-xl font-semibold text-stone-900">
+            <h2 className="font-display text-xl font-semibold text-ink">
               2. Dados que coletamos
             </h2>
             <ul className="mt-2 list-disc space-y-1 pl-5">
@@ -43,7 +43,7 @@ export default function PrivacidadePage() {
           </section>
 
           <section>
-            <h2 className="font-display text-xl font-semibold text-stone-900">3. Finalidades</h2>
+            <h2 className="font-display text-xl font-semibold text-ink">3. Finalidades</h2>
             <p className="mt-2">
               Usamos os dados para criar e autenticar contas, operar agendamentos, comunicar
               confirmações/lembretes, cobrar planos (quando aplicável) e cumprir obrigações legais.
@@ -51,7 +51,7 @@ export default function PrivacidadePage() {
           </section>
 
           <section>
-            <h2 className="font-display text-xl font-semibold text-stone-900">4. Bases legais</h2>
+            <h2 className="font-display text-xl font-semibold text-ink">4. Bases legais</h2>
             <p className="mt-2">
               Tratamos dados com base na execução de contrato, legítimo interesse (segurança e
               melhoria do serviço) e consentimento quando exigido (ex.: comunicações de marketing).
@@ -59,7 +59,7 @@ export default function PrivacidadePage() {
           </section>
 
           <section>
-            <h2 className="font-display text-xl font-semibold text-stone-900">
+            <h2 className="font-display text-xl font-semibold text-ink">
               5. Compartilhamento
             </h2>
             <p className="mt-2">
@@ -69,7 +69,7 @@ export default function PrivacidadePage() {
           </section>
 
           <section>
-            <h2 className="font-display text-xl font-semibold text-stone-900">
+            <h2 className="font-display text-xl font-semibold text-ink">
               6. Seus direitos (LGPD)
             </h2>
             <p className="mt-2">
@@ -80,7 +80,7 @@ export default function PrivacidadePage() {
           </section>
 
           <section>
-            <h2 className="font-display text-xl font-semibold text-stone-900">
+            <h2 className="font-display text-xl font-semibold text-ink">
               7. Retenção e segurança
             </h2>
             <p className="mt-2">
@@ -91,7 +91,7 @@ export default function PrivacidadePage() {
           </section>
 
           <section>
-            <h2 className="font-display text-xl font-semibold text-stone-900">8. Contato</h2>
+            <h2 className="font-display text-xl font-semibold text-ink">8. Contato</h2>
             <p className="mt-2">
               Para exercer direitos ou tirar dúvidas sobre privacidade, entre em contato pelo e-mail
               de suporte informado no produto ou no site oficial da Agenda Pro.

@@ -2,10 +2,11 @@
 
 import { useRouter } from 'next/navigation';
 import { FormEvent, useEffect, useState } from 'react';
+import { useAuth } from '@/components/AuthProvider';
 import { Alert, Button, Field, Input, PageTitle, Spinner, Textarea } from '@/components/ui';
 import { api, ApiError } from '@/lib/api';
 import { clearSessionFlag } from '@/lib/auth';
-import type { AuthUserPayload, TenantSettings } from '@/lib/types';
+import type { TenantSettings } from '@/lib/types';
 
 type ProfileForm = {
   name: string;
@@ -30,7 +31,7 @@ type LoyaltyForm = {
 
 export default function SettingsPage() {
   const router = useRouter();
-  const [me, setMe] = useState<AuthUserPayload | null>(null);
+  const { me } = useAuth();
   const [settings, setSettings] = useState<TenantSettings | null>(null);
   const [confirmText, setConfirmText] = useState('');
   const [deletePassword, setDeletePassword] = useState('');
@@ -76,9 +77,8 @@ export default function SettingsPage() {
   }
 
   useEffect(() => {
-    void Promise.all([api<AuthUserPayload>('/api/auth/me'), api<TenantSettings>('/api/settings')])
-      .then(([meData, settingsData]) => {
-        setMe(meData);
+    void api<TenantSettings>('/api/settings')
+      .then((settingsData) => {
         applySettings(settingsData);
       })
       .catch((err) =>
@@ -207,36 +207,36 @@ export default function SettingsPage() {
         </div>
       ) : null}
 
-      <section className="mb-10 rounded-lg bg-white/80 p-5 ring-1 ring-stone-200">
-        <h2 className="font-display text-lg font-semibold text-stone-900">Conta</h2>
+      <section className="mb-10 surface-elevated rounded-2xl p-5">
+        <h2 className="font-display text-lg font-semibold text-ink">Conta</h2>
         <dl className="mt-4 space-y-2 text-sm">
           <div className="flex gap-2">
-            <dt className="w-28 text-stone-500">Nome</dt>
-            <dd className="font-medium text-stone-900">{me?.user?.name}</dd>
+            <dt className="w-28 text-muted">Nome</dt>
+            <dd className="font-medium text-ink">{me?.user?.name}</dd>
           </div>
           <div className="flex gap-2">
-            <dt className="w-28 text-stone-500">E-mail</dt>
-            <dd className="font-medium text-stone-900">{me?.user?.email}</dd>
+            <dt className="w-28 text-muted">E-mail</dt>
+            <dd className="font-medium text-ink">{me?.user?.email}</dd>
           </div>
           <div className="flex gap-2">
-            <dt className="w-28 text-stone-500">Negócio</dt>
-            <dd className="font-medium text-stone-900">{settings?.name || me?.tenant?.name}</dd>
+            <dt className="w-28 text-muted">Negócio</dt>
+            <dd className="font-medium text-ink">{settings?.name || me?.tenant?.name}</dd>
           </div>
           <div className="flex gap-2">
-            <dt className="w-28 text-stone-500">Slug</dt>
-            <dd className="font-medium text-stone-900">/u/{settings?.slug || me?.tenant?.slug}</dd>
+            <dt className="w-28 text-muted">Slug</dt>
+            <dd className="font-medium text-ink">/u/{settings?.slug || me?.tenant?.slug}</dd>
           </div>
           <div className="flex gap-2">
-            <dt className="w-28 text-stone-500">Plano</dt>
-            <dd className="font-medium text-stone-900">{settings?.plan || me?.tenant?.plan}</dd>
+            <dt className="w-28 text-muted">Plano</dt>
+            <dd className="font-medium text-ink">{settings?.plan || me?.tenant?.plan}</dd>
           </div>
         </dl>
       </section>
 
       {profileForm ? (
-        <section className="mb-10 rounded-lg bg-white/80 p-5 ring-1 ring-stone-200">
-          <h2 className="font-display text-lg font-semibold text-stone-900">Perfil público</h2>
-          <p className="mt-1 text-sm text-stone-600">
+        <section className="mb-10 surface-elevated rounded-2xl p-5">
+          <h2 className="font-display text-lg font-semibold text-ink">Perfil público</h2>
+          <p className="mt-1 text-sm text-muted">
             Informações exibidas na sua página de agendamento (/u/{settings?.slug}).
           </p>
           <form onSubmit={saveProfile} className="mt-5 space-y-4" noValidate>
@@ -299,11 +299,11 @@ export default function SettingsPage() {
       ) : null}
 
       {bookingForm ? (
-        <section className="mb-10 rounded-lg bg-white/80 p-5 ring-1 ring-stone-200">
-          <h2 className="font-display text-lg font-semibold text-stone-900">
+        <section className="mb-10 surface-elevated rounded-2xl p-5">
+          <h2 className="font-display text-lg font-semibold text-ink">
             Regras de agendamento
           </h2>
-          <p className="mt-1 text-sm text-stone-600">
+          <p className="mt-1 text-sm text-muted">
             Controle como os clientes podem marcar, remarcar e cancelar horários.
           </p>
           <form onSubmit={saveBooking} className="mt-5 space-y-4" noValidate>
@@ -404,9 +404,9 @@ export default function SettingsPage() {
       ) : null}
 
       {loyaltyForm ? (
-        <section className="mb-10 rounded-lg bg-white/80 p-5 ring-1 ring-stone-200">
-          <h2 className="font-display text-lg font-semibold text-stone-900">Fidelidade</h2>
-          <p className="mt-1 text-sm text-stone-600">
+        <section className="mb-10 surface-elevated rounded-2xl p-5">
+          <h2 className="font-display text-lg font-semibold text-ink">Fidelidade</h2>
+          <p className="mt-1 text-sm text-muted">
             Clientes acumulam pontos a cada atendimento concluído.
           </p>
           <form onSubmit={saveLoyalty} className="mt-5 space-y-4" noValidate>
@@ -422,7 +422,7 @@ export default function SettingsPage() {
                   setLoyaltyForm((f) => (f ? { ...f, loyaltyEnabled: e.target.checked } : f))
                 }
               />
-              <label htmlFor="ly-enabled" className="text-sm font-medium text-stone-800">
+              <label htmlFor="ly-enabled" className="text-sm font-medium text-ink-soft">
                 Ativar programa de fidelidade
               </label>
             </div>

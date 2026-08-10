@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { FormEvent, useState } from 'react';
 import { AuthShell } from '@/components/AuthShell';
 import { Alert, Button, Field, Input } from '@/components/ui';
-import { api, ApiError } from '@/lib/api';
+import { api, ApiError, ensureCsrfToken } from '@/lib/api';
 import { setSessionFlag } from '@/lib/auth';
 import type { LoginResponse } from '@/lib/types';
 
@@ -49,6 +49,7 @@ export default function RegisterPage() {
       });
       // Sessão fica nos cookies httpOnly; só marcamos o flag de UX.
       setSessionFlag();
+      await ensureCsrfToken();
       router.replace('/dashboard');
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Não foi possível criar a conta.');
@@ -62,9 +63,9 @@ export default function RegisterPage() {
       title="Criar conta"
       description="Configure seu negócio e comece a receber agendamentos."
       footer={
-        <p className="text-sm text-[#6b736e]">
+        <p className="text-sm text-muted">
           Já tem conta?{' '}
-          <Link href="/login" className="font-semibold text-teal-800 hover:underline">
+          <Link href="/login" className="font-semibold text-mint-deep hover:underline">
             Entrar
           </Link>
         </p>

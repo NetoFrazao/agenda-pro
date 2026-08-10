@@ -39,9 +39,9 @@ export default function ForgotPasswordPage() {
       title="Esqueci minha senha"
       description="Informe o e-mail da sua conta e enviaremos um link de redefinição."
       footer={
-        <p className="text-sm text-[#6b736e]">
+        <p className="text-sm text-muted">
           Lembrou a senha?{' '}
-          <Link href="/login" className="font-semibold text-teal-800 hover:underline">
+          <Link href="/login" className="font-semibold text-mint-deep hover:underline">
             Entrar
           </Link>
         </p>
@@ -53,7 +53,7 @@ export default function ForgotPasswordPage() {
             Se o e-mail existir, enviamos um link de redefinição. Confira sua caixa de entrada e o
             spam.
           </Alert>
-          <Link href="/login" className="text-sm font-semibold text-teal-800 hover:underline">
+          <Link href="/login" className="text-sm font-semibold text-mint-deep hover:underline">
             Voltar para o login
           </Link>
         </div>
