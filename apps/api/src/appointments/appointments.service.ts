@@ -25,6 +25,7 @@ export class AppointmentsService {
       from?: string;
       to?: string;
       professionalId?: string;
+      activeOnly?: boolean;
       page?: number;
       pageSize?: number;
       actor?: { userId: string; role: string };
@@ -33,8 +34,13 @@ export class AppointmentsService {
     return this.lifecycle.list(tenantId, opts);
   }
 
-  updateStatus(tenantId: string, id: string, status: AppointmentStatus) {
-    return this.lifecycle.updateStatus(tenantId, id, status);
+  updateStatus(
+    tenantId: string,
+    id: string,
+    status: AppointmentStatus,
+    actor?: { userId: string; role: string },
+  ) {
+    return this.lifecycle.updateStatus(tenantId, id, status, actor);
   }
 
   getPublicProfile(slug: string) {
