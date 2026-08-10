@@ -20,6 +20,7 @@ export {
   Info,
   Loader2,
   LogOut,
+  MapPin,
   Menu,
   MessageCircle,
   Pencil,
