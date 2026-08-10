@@ -1,24 +1,21 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useAuth } from '@/components/AuthProvider';
 import { Alert, Badge, Button, EmptyState, PageTitle, Spinner, Stars } from '@/components/ui';
 import { api, ApiError } from '@/lib/api';
 import { formatDateTime } from '@/lib/format';
-import type { AuthUserPayload, Review } from '@/lib/types';
+import type { Review } from '@/lib/types';
 
 export default function ReviewsPage() {
+  const { timezone } = useAuth();
   const [items, setItems] = useState<Review[]>([]);
-  const [timezone, setTimezone] = useState<string | undefined>();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [togglingId, setTogglingId] = useState<string | null>(null);
 
   async function load() {
-    const [me, data] = await Promise.all([
-      api<AuthUserPayload>('/api/auth/me'),
-      api<Review[]>('/api/reviews'),
-    ]);
-    setTimezone(me.tenant?.timezone);
+    const data = await api<Review[]>('/api/reviews');
     setItems(Array.isArray(data) ? data : []);
   }
 
@@ -70,18 +67,18 @@ export default function ReviewsPage() {
       ) : (
         <ul className="space-y-3">
           {items.map((r) => (
-            <li key={r.id} className="rounded-lg bg-white p-4 ring-1 ring-stone-200">
+            <li key={r.id} className="surface-elevated rounded-2xl p-4">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div>
                   <div className="flex flex-wrap items-center gap-2">
                     <Stars value={r.rating} />
-                    <p className="font-semibold text-stone-900">{r.clientName || 'Cliente'}</p>
+                    <p className="font-semibold text-ink">{r.clientName || 'Cliente'}</p>
                     <Badge tone={r.isPublished ? 'emerald' : 'stone'}>
                       {r.isPublished ? 'Publicada' : 'Oculta'}
                     </Badge>
                   </div>
-                  {r.comment ? <p className="mt-2 text-sm text-stone-700">{r.comment}</p> : null}
-                  <p className="mt-2 text-sm text-stone-500">
+                  {r.comment ? <p className="mt-2 text-sm text-ink-muted">{r.comment}</p> : null}
+                  <p className="mt-2 text-sm text-muted">
                     {r.appointment?.service?.name || 'Serviço'}
                     {r.appointment?.professional?.name
                       ? ` · ${r.appointment.professional.name}`
@@ -90,7 +87,7 @@ export default function ReviewsPage() {
                       ? ` · atendimento em ${formatDateTime(r.appointment.startsAt, timezone)}`
                       : ''}
                   </p>
-                  <p className="mt-1 text-xs text-stone-400">
+                  <p className="mt-1 text-xs text-muted-soft">
                     Recebida em {formatDateTime(r.createdAt, timezone)}
                   </p>
                 </div>

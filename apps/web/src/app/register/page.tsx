@@ -62,9 +62,9 @@ export default function RegisterPage() {
       title="Criar conta"
       description="Configure seu negócio e comece a receber agendamentos."
       footer={
-        <p className="text-sm text-[#6b736e]">
+        <p className="text-sm text-muted">
           Já tem conta?{' '}
-          <Link href="/login" className="font-semibold text-teal-800 hover:underline">
+          <Link href="/login" className="font-semibold text-mint-deep hover:underline">
             Entrar
           </Link>
         </p>

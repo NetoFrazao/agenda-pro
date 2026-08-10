@@ -67,7 +67,7 @@ export default function PlanosPage() {
       <main className="mx-auto w-full max-w-5xl flex-1 px-6 py-12 sm:px-10">
         <div className="max-w-2xl">
           <h1 className="font-display text-4xl font-semibold tracking-tight text-ink">Planos</h1>
-          <p className="mt-3 text-lg leading-relaxed text-[#6b736e]">
+          <p className="mt-3 text-lg leading-relaxed text-muted">
             Escolha o ritmo do seu negócio. Você pode começar e evoluir quando a agenda crescer.
           </p>
         </div>
@@ -112,11 +112,11 @@ export default function PlanosPage() {
                   </h2>
                   {price != null ? (
                     <p
-                      className={`mt-3 font-display text-3xl font-semibold ${isFeatured ? 'text-mint-glow' : 'text-teal-800'}`}
+                      className={`mt-3 font-display text-3xl font-semibold ${isFeatured ? 'text-mint-glow' : 'text-mint-deep'}`}
                     >
                       {formatBRL(price)}
                       <span
-                        className={`text-base font-normal ${isFeatured ? 'text-white/50' : 'text-[#6b736e]'}`}
+                        className={`text-base font-normal ${isFeatured ? 'text-white/50' : 'text-muted'}`}
                       >
                         /mês
                       </span>
@@ -124,16 +124,16 @@ export default function PlanosPage() {
                   ) : null}
                   {plan.description ? (
                     <p
-                      className={`mt-3 text-sm leading-relaxed ${isFeatured ? 'text-white/60' : 'text-[#6b736e]'}`}
+                      className={`mt-3 text-sm leading-relaxed ${isFeatured ? 'text-white/60' : 'text-muted'}`}
                     >
                       {plan.description}
                     </p>
                   ) : null}
                   <ul
-                    className={`mt-5 flex-1 space-y-2.5 text-sm ${isFeatured ? 'text-white/70' : 'text-[#6b736e]'}`}
+                    className={`mt-5 flex-1 space-y-2.5 text-sm ${isFeatured ? 'text-white/70' : 'text-muted'}`}
                   >
                     <li className="flex items-start gap-2">
-                      <span className={isFeatured ? 'text-mint' : 'text-teal-800'} aria-hidden>
+                      <span className={isFeatured ? 'text-mint' : 'text-mint-deep'} aria-hidden>
                         ✓
                       </span>
                       {plan.monthlyBookingLimit == null
@@ -141,14 +141,14 @@ export default function PlanosPage() {
                         : `Até ${plan.monthlyBookingLimit} agendamentos/mês`}
                     </li>
                     <li className="flex items-start gap-2">
-                      <span className={isFeatured ? 'text-mint' : 'text-teal-800'} aria-hidden>
+                      <span className={isFeatured ? 'text-mint' : 'text-mint-deep'} aria-hidden>
                         ✓
                       </span>
                       {plan.whatsappReminders ? 'Lembretes por WhatsApp' : 'Lembretes por e-mail'}
                     </li>
                     {plan.pixDepositEnabled ? (
                       <li className="flex items-start gap-2">
-                        <span className={isFeatured ? 'text-mint' : 'text-teal-800'} aria-hidden>
+                        <span className={isFeatured ? 'text-mint' : 'text-mint-deep'} aria-hidden>
                           ✓
                         </span>
                         Sinal via PIX

@@ -61,7 +61,7 @@ export default function WaitlistPage() {
         description="Clientes aguardando vaga em dias lotados. Eles são avisados automaticamente quando um horário abre."
       />
 
-      <div className="mb-6 flex flex-col gap-3 rounded-lg bg-white/80 p-4 ring-1 ring-stone-200 sm:flex-row sm:items-end">
+      <div className="mb-6 flex flex-col gap-3 surface-elevated rounded-2xl p-4 sm:flex-row sm:items-end">
         <Field label="Filtrar por dia" id="wl-date">
           <Input id="wl-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
         </Field>
@@ -89,19 +89,19 @@ export default function WaitlistPage() {
           {items.map((entry) => (
             <li
               key={entry.id}
-              className="flex flex-col gap-3 rounded-lg bg-white p-4 ring-1 ring-stone-200 sm:flex-row sm:items-center sm:justify-between"
+              className="flex flex-col gap-3 surface-elevated rounded-2xl p-4 sm:flex-row sm:items-center sm:justify-between"
             >
               <div>
-                <p className="flex flex-wrap items-center gap-2 font-semibold text-stone-900">
+                <p className="flex flex-wrap items-center gap-2 font-semibold text-ink">
                   {entry.clientName}
                   <Badge tone={entry.status === 'NOTIFIED' ? 'sky' : 'amber'}>
                     {entry.status === 'NOTIFIED' ? 'Avisado' : 'Aguardando'}
                   </Badge>
                 </p>
-                <p className="mt-1 text-sm text-stone-600">
+                <p className="mt-1 text-sm text-muted">
                   Quer atendimento em <strong>{formatDate(entry.dateKey)}</strong>
                 </p>
-                <p className="mt-1 text-sm text-stone-500">
+                <p className="mt-1 text-sm text-muted">
                   {entry.clientPhone}
                   {entry.clientEmail ? ` · ${entry.clientEmail}` : ''} · entrou em{' '}
                   {formatDateTime(entry.createdAt)}

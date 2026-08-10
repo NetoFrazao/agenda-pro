@@ -66,7 +66,7 @@ export function PixBlock({
         ) : null}
         <div className="min-w-0 flex-1">
           <p className="text-sm font-medium text-amber-950">PIX copia-e-cola</p>
-          <p className="mt-1 max-h-24 overflow-y-auto break-all rounded-md bg-white p-2 font-mono text-xs text-stone-700 ring-1 ring-amber-200">
+          <p className="mt-1 max-h-24 overflow-y-auto break-all rounded-md bg-white p-2 font-mono text-xs text-ink-muted ring-1 ring-amber-200">
             {copyPaste}
           </p>
           <div className="mt-3">

@@ -1,32 +1,31 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useAuth } from '@/components/AuthProvider';
 import { Alert, Button, EmptyState, PageTitle, Spinner } from '@/components/ui';
 import { api, ApiError } from '@/lib/api';
 import { formatBRL, PLAN_PRICE_PLACEHOLDERS } from '@/lib/format';
-import type { AuthUserPayload, PlanCode, PlanDefinition } from '@/lib/types';
+import type { PlanCode, PlanDefinition } from '@/lib/types';
 
 export default function BillingPage() {
+  const { me, refresh } = useAuth();
   const [plans, setPlans] = useState<PlanDefinition[]>([]);
-  const [me, setMe] = useState<AuthUserPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
   async function load() {
-    const [plansData, meData] = await Promise.all([
-      api<PlanDefinition[]>('/api/billing/plans'),
-      api<AuthUserPayload>('/api/auth/me'),
-    ]);
+    const plansData = await api<PlanDefinition[]>('/api/billing/plans');
     setPlans(Array.isArray(plansData) ? plansData : []);
-    setMe(meData);
+    await refresh();
   }
 
   useEffect(() => {
     void load()
       .catch((err) => setError(err instanceof ApiError ? err.message : 'Erro ao carregar planos.'))
       .finally(() => setLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function checkout(plan: PlanCode) {
@@ -90,7 +89,7 @@ export default function BillingPage() {
         </div>
       ) : null}
 
-      <p className="mb-6 text-sm text-stone-600">
+      <p className="mb-6 text-sm text-muted">
         Plano atual: <strong>{current || '—'}</strong>
       </p>
 
@@ -104,19 +103,19 @@ export default function BillingPage() {
             return (
               <li
                 key={plan.code}
-                className="flex flex-col rounded-lg bg-white p-5 ring-1 ring-stone-200"
+                className="flex flex-col surface-elevated rounded-2xl p-5"
               >
-                <h2 className="font-display text-xl font-semibold text-stone-900">{plan.name}</h2>
+                <h2 className="font-display text-xl font-semibold text-ink">{plan.name}</h2>
                 {price != null ? (
                   <p className="mt-2 text-2xl font-semibold text-emerald-800">
                     {formatBRL(price)}
-                    <span className="text-sm font-normal text-stone-500">/mês</span>
+                    <span className="text-sm font-normal text-muted">/mês</span>
                   </p>
                 ) : null}
                 {plan.description ? (
-                  <p className="mt-3 text-sm text-stone-600">{plan.description}</p>
+                  <p className="mt-3 text-sm text-muted">{plan.description}</p>
                 ) : null}
-                <ul className="mt-4 flex-1 space-y-1 text-sm text-stone-600">
+                <ul className="mt-4 flex-1 space-y-1 text-sm text-muted">
                   {plan.monthlyBookingLimit != null ? (
                     <li>
                       {plan.monthlyBookingLimit === null

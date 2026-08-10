@@ -161,7 +161,7 @@ export default function AvailabilityPage() {
 
       <form
         onSubmit={onSubmit}
-        className="mb-10 grid gap-4 rounded-lg bg-white/80 p-5 ring-1 ring-stone-200 sm:grid-cols-4"
+        className="mb-10 grid gap-4 surface-elevated rounded-2xl p-5 sm:grid-cols-4"
       >
         <Field label="Dia da semana" id="day">
           <Select id="day" value={dayOfWeek} onChange={(e) => setDayOfWeek(e.target.value)}>
@@ -202,12 +202,12 @@ export default function AvailabilityPage() {
           Nenhuma regra de disponibilidade. Sem regras, a página pública não terá horários.
         </EmptyState>
       ) : (
-        <ul className="divide-y divide-stone-200 overflow-hidden rounded-lg bg-white ring-1 ring-stone-200">
+        <ul className="divide-y divide-line overflow-hidden rounded-lg bg-white ring-1 ring-line">
           {sorted.map((rule) => (
             <li key={rule.id} className="flex items-center justify-between gap-3 px-4 py-3">
               <div>
-                <p className="font-medium text-stone-900">{dayName(rule.dayOfWeek)}</p>
-                <p className="text-sm text-stone-600">
+                <p className="font-medium text-ink">{dayName(rule.dayOfWeek)}</p>
+                <p className="text-sm text-muted">
                   {minutesToTime(rule.startMinute)} – {minutesToTime(rule.endMinute)}
                   {!rule.isActive ? ' · inativa' : ''}
                 </p>
@@ -221,10 +221,10 @@ export default function AvailabilityPage() {
       )}
 
       <section className="mt-14" aria-labelledby="exceptions-title">
-        <h2 id="exceptions-title" className="font-display text-xl font-semibold text-stone-900">
+        <h2 id="exceptions-title" className="font-display text-xl font-semibold text-ink">
           Folgas e feriados
         </h2>
-        <p className="mt-2 max-w-2xl text-sm text-stone-600">
+        <p className="mt-2 max-w-2xl text-sm text-muted">
           Bloqueie dias inteiros (folga, feriado) ou abra uma janela especial de atendimento em um
           dia específico. Exceções têm prioridade sobre as regras semanais.
         </p>
@@ -237,7 +237,7 @@ export default function AvailabilityPage() {
 
         <form
           onSubmit={submitException}
-          className="mt-5 grid gap-4 rounded-lg bg-white/80 p-5 ring-1 ring-stone-200 sm:grid-cols-2 lg:grid-cols-6"
+          className="mt-5 grid gap-4 surface-elevated rounded-2xl p-5 sm:grid-cols-2 lg:grid-cols-6"
         >
           <Field label="Data" id="exc-date">
             <Input
@@ -300,11 +300,11 @@ export default function AvailabilityPage() {
           {exceptions.length === 0 ? (
             <EmptyState>Nenhuma folga ou feriado cadastrado.</EmptyState>
           ) : (
-            <ul className="divide-y divide-stone-200 overflow-hidden rounded-lg bg-white ring-1 ring-stone-200">
+            <ul className="divide-y divide-line overflow-hidden rounded-lg bg-white ring-1 ring-line">
               {exceptions.map((exc) => (
                 <li key={exc.id} className="flex items-center justify-between gap-3 px-4 py-3">
                   <div>
-                    <p className="flex flex-wrap items-center gap-2 font-medium text-stone-900">
+                    <p className="flex flex-wrap items-center gap-2 font-medium text-ink">
                       {formatDate(exc.date.slice(0, 10))}
                       <Badge tone={exc.isAvailable ? 'emerald' : 'red'}>
                         {exc.isAvailable
@@ -312,7 +312,7 @@ export default function AvailabilityPage() {
                           : 'Dia bloqueado'}
                       </Badge>
                     </p>
-                    {exc.reason ? <p className="text-sm text-stone-600">{exc.reason}</p> : null}
+                    {exc.reason ? <p className="text-sm text-muted">{exc.reason}</p> : null}
                   </div>
                   <Button
                     type="button"
