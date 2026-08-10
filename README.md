@@ -12,7 +12,7 @@ SaaS multi-tenant de **agendamentos** para barbeiros, manicures e pequenos estab
 | Suíte E2E frontend (Playwright) | ⏳ backlog |
 | Observabilidade full (Sentry/OTel) | ⏳ planejado |
 
-Relatório consolidado: **[FINAL-AUDIT.md](./FINAL-AUDIT.md)** · Índice: **[docs/DOCUMENTATION.md](./docs/DOCUMENTATION.md)**
+Relatório consolidado: **[docs/reviews/FINAL-AUDIT.md](./docs/reviews/FINAL-AUDIT.md)** · Índice: **[docs/DOCUMENTATION.md](./docs/DOCUMENTATION.md)** · Reviews: **[docs/reviews/](./docs/reviews/)**
 
 ## Stack
 
@@ -72,19 +72,22 @@ Contratos: [docs/API.md](./docs/API.md) · Arquitetura: [docs/ARCHITECTURE.md](.
 
 | Doc | Tema |
 |-----|------|
-| [DEPLOYMENT.md](./DEPLOYMENT.md) | Checklist e topologias |
-| [BACKUP.md](./BACKUP.md) | Backup Postgres |
+| [DEPLOYMENT.md](./DEPLOYMENT.md) | Checklist, TLS Caddy, CD/GHCR |
+| [BACKUP.md](./BACKUP.md) | Backup agendado + drill |
 | [DISASTER-RECOVERY.md](./DISASTER-RECOVERY.md) | RPO/RTO / runbooks |
-| [INFRASTRUCTURE-AUDIT.md](./INFRASTRUCTURE-AUDIT.md) | Auditoria infra |
+| [docs/reviews/SCORECARD_DEVOPS.md](./docs/reviews/SCORECARD_DEVOPS.md) | Nota DevOps |
+| [docs/reviews/INFRASTRUCTURE-AUDIT.md](./docs/reviews/INFRASTRUCTURE-AUDIT.md) | Auditoria infra |
 
 ```powershell
 npm run docker:prod:up
+npm run docker:prod:tls:config   # sanity TLS overlay
 npm run db:backup:dry
+npm run ops:audit
 ```
 
 ## Git / GitHub Desktop
 
-Branch de hardening: `cursor/saas-hardening-crm-infra`.
+Branch DevOps: `cursor/agent-devops` (base `cursor/saas-hardening-crm-infra`).
 
 Se ainda não houver `origin`:
 
@@ -97,6 +100,8 @@ Se ainda não houver `origin`:
 ```
 apps/api     NestJS + Prisma + filas + PIX/billing
 apps/web     Next.js (dashboard + booking + design system)
-docs/        Documentação completa
-scripts/     Bootstrap, backup, restore
+docs/        Documentação + docs/reviews (auditorias)
+deploy/      Caddyfile + certs locais
+scripts/     Bootstrap, backup, CD, audit, health
+ops/         Allowlist audit + fixtures drill
 ```

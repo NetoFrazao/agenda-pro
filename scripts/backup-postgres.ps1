@@ -22,6 +22,18 @@ $db = if ($env:POSTGRES_DB) { $env:POSTGRES_DB } else { 'agenda_pro' }
 $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
 $outFile = Join-Path $OutDir "agenda-pro-$stamp.sql"
 $offHost = if ($OffHostDir) { $OffHostDir } elseif ($env:BACKUP_OFFHOST_DIR) { $env:BACKUP_OFFHOST_DIR } else { '' }
+$hook = if ($env:BACKUP_ALERT_WEBHOOK_URL) { $env:BACKUP_ALERT_WEBHOOK_URL } elseif ($env:HEALTH_ALERT_WEBHOOK_URL) { $env:HEALTH_ALERT_WEBHOOK_URL } else { '' }
+
+function Send-BackupAlert([string]$Message) {
+  Write-Warning $Message
+  if (-not $hook) { return }
+  try {
+    $payload = @{ text = $Message; content = $Message } | ConvertTo-Json
+    Invoke-RestMethod -Uri $hook -Method POST -Body $payload -ContentType 'application/json' | Out-Null
+  } catch {
+    Write-Warning "Falha ao postar alerta: $($_.Exception.Message)"
+  }
+}
 
 Write-Host "==> Compose: $ComposeFile  service: $Service  db: $db"
 Write-Host "==> Destino: $outFile"
@@ -40,15 +52,24 @@ if (-not (Test-Path $OutDir)) {
   New-Item -ItemType Directory -Path $OutDir | Out-Null
 }
 
-docker compose -f $ComposeFile exec -T $Service `
-  pg_dump -U $user -d $db --no-owner --format=plain | Set-Content -Path $outFile -Encoding utf8
-
-if ($LASTEXITCODE -ne 0) {
-  Write-Error "pg_dump falhou (exit $LASTEXITCODE)"
-  exit $LASTEXITCODE
+try {
+  docker compose -f $ComposeFile exec -T $Service `
+    pg_dump -U $user -d $db --no-owner --format=plain | Set-Content -Path $outFile -Encoding utf8
+  if ($LASTEXITCODE -ne 0) {
+    throw "pg_dump falhou (exit $LASTEXITCODE)"
+  }
+} catch {
+  Send-BackupAlert "[Agenda Pro] BACKUP FALHOU: $($_.Exception.Message)"
+  throw
 }
 
 $size = (Get-Item $outFile).Length
+if ($size -lt 100) {
+  Send-BackupAlert "[Agenda Pro] BACKUP FALHOU dump suspeito ($size bytes)"
+  Write-Error "Dump suspeitamente pequeno ($size bytes)"
+  exit 1
+}
+
 Write-Host "OK backup: $outFile ($size bytes)"
 
 if ($offHost) {

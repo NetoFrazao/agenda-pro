@@ -63,3 +63,15 @@ Fonte canônica de exemplos: [`.env.example`](../.env.example).
 
 - `GET /api/health` — liveness (Postgres)
 - `GET /api/health/ready` — readiness (Postgres **e** Redis); 503 se algum crítico down
+
+## Ops / observabilidade
+
+| Variável | Descrição |
+|----------|-----------|
+| `HEALTH_READY_URL` | URL do probe (`watch-ready` / GitHub Actions) |
+| `HEALTH_ALERT_WEBHOOK_URL` | Slack/Discord/generic em falha de ready ou backup |
+| `BACKUP_OFFHOST_DIR` | Destino off-host após `pg_dump` |
+| `BACKUP_ALERT_WEBHOOK_URL` | Alerta específico de backup (fallback: health webhook) |
+| `TLS_DOMAIN` / `CADDY_EMAIL` | Compose TLS (`docker-compose.tls.yml`) |
+| `API_IMAGE` / `WEB_IMAGE` | Tags GHCR no deploy (`scripts/deploy-release.sh`) |
+| `SENTRY_DSN` / `SENTRY_ENVIRONMENT` / `NEXT_PUBLIC_SENTRY_DSN` | Reservadas — SDK ainda não no app; ver [ops/SENTRY.md](./ops/SENTRY.md) |

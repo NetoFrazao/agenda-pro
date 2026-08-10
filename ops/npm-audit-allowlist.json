@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "updated": "2026-08-09",
+  "expires": "2026-10-09",
+  "policy": "CI fails on high/critical unless package is listed here with reason + expiry. Soft-fail silencioso é proibido.",
+  "allowed": [
+    {
+      "package": "next",
+      "severity": ["high"],
+      "until": "2026-10-09",
+      "reason": "Fix path requires coordinated next@16 (postcss/sharp). Tracked in SCORECARD_DEVOPS / FRONTEND."
+    },
+    {
+      "package": "postcss",
+      "severity": ["high"],
+      "until": "2026-10-09",
+      "reason": "Transitivo via next@15; resolved by next major upgrade."
+    },
+    {
+      "package": "sharp",
+      "severity": ["high"],
+      "until": "2026-10-09",
+      "reason": "Transitivo via next image pipeline; bump with next@16."
+    },
+    {
+      "package": "js-yaml",
+      "severity": ["high"],
+      "until": "2026-10-09",
+      "reason": "Transitivo @nestjs/swagger; bump swagger when compatible release lands."
+    },
+    {
+      "package": "@nestjs/swagger",
+      "severity": ["high"],
+      "until": "2026-10-09",
+      "reason": "Parent of js-yaml advisory; no safe patch-only bump without API review."
+    }
+  ]
+}

@@ -1,6 +1,6 @@
 # Índice de documentação — Agenda Pro
 
-Última atualização: 2026-08-09 · Branch de referência: `cursor/saas-hardening-crm-infra`
+Última atualização: 2026-08-09 · Branch: `cursor/agent-devops` (base `cursor/saas-hardening-crm-infra`)
 
 ## Começar aqui
 
@@ -10,20 +10,21 @@
 | [SETUP](./SETUP.md) | Ambiente local completo |
 | [ARCHITECTURE](./ARCHITECTURE.md) | Stack, módulos, fluxos |
 | [PERFORMANCE](./PERFORMANCE.md) | Worker, PROCESS_ROLE, cache Redis |
-| [SCORECARD Performance](../SCORECARD_PERFORMANCE_SCALE.md) | Nota honestidade escala |
-| [FINAL-AUDIT](../FINAL-AUDIT.md) | O que foi entregue no hardening |
-| [MEGA CODE REVIEW](../MEGA_CODE_REVIEW.md) | Consolidação das 10 revisões (2026-08-09) |
+| [Reviews / scorecards](./reviews/) | Auditorias e notas por domínio |
+| [FINAL-AUDIT](./reviews/FINAL-AUDIT.md) | O que foi entregue no hardening |
+| [MEGA CODE REVIEW](./reviews/MEGA_CODE_REVIEW.md) | Consolidação das revisões |
 
 ## Operação e produção
 
 | Doc | Conteúdo |
 |-----|----------|
-| [DEPLOYMENT](../DEPLOYMENT.md) | Topologias, checklist pré-prod, health |
-| [DEPLOY](./DEPLOY.md) | Notas de deploy cloud (legado + links) |
+| [DEPLOYMENT](../DEPLOYMENT.md) | Topologias, TLS, CD, checklist |
+| [DEPLOY](./DEPLOY.md) | Deploy cloud + GHCR |
 | [DATABASE](../DATABASE.md) | Prisma, índices, migrations |
-| [BACKUP](../BACKUP.md) | Backup Postgres |
+| [BACKUP](../BACKUP.md) | Backup agendado + drill |
 | [DISASTER-RECOVERY](../DISASTER-RECOVERY.md) | RPO/RTO e runbooks |
-| [INFRASTRUCTURE-AUDIT](../INFRASTRUCTURE-AUDIT.md) | Auditoria infra/SRE |
+| [Sentry stub](./ops/SENTRY.md) | Observabilidade (SDK pendente) |
+| [SCORECARD DevOps](./reviews/SCORECARD_DEVOPS.md) | Nota ops |
 
 ## Segurança, produto e qualidade
 
@@ -31,7 +32,7 @@
 |-----|----------|
 | [SECURITY](./SECURITY.md) | Auth, RBAC, webhooks, LGPD |
 | [API](./API.md) | Contratos HTTP e breaking changes |
-| [AUDIT](../AUDIT.md) | Auditoria Fase 1 + status Fases 2–7 |
+| [AUDIT](./reviews/AUDIT.md) | Auditoria Fase 1 + status Fases 2–7 |
 | [ENV](./ENV.md) | Variáveis de ambiente |
 | [TROUBLESHOOTING](./TROUBLESHOOTING.md) | Problemas comuns |
 
@@ -39,8 +40,8 @@
 
 | Doc | Conteúdo |
 |-----|----------|
-| [DESIGN → ENGINEERING](../DESIGN-ENGINEERING-REQUESTS.md) | Pedidos de UI ao backend |
-| [INFRA → ENGINEERING](../INFRA-ENGINEERING-REQUESTS.md) | Pedidos de infra ao backend |
+| [DESIGN → ENGINEERING](./reviews/DESIGN-ENGINEERING-REQUESTS.md) | Pedidos de UI ao backend |
+| [INFRA → ENGINEERING](./reviews/INFRA-ENGINEERING-REQUESTS.md) | Pedidos de infra ao backend |
 
 ## ADRs e histórico de fases
 
@@ -57,6 +58,8 @@
 | Script | Função |
 |--------|--------|
 | `scripts/bootstrap-local.ps1` | Sobe stack local |
-| `scripts/start-docker-and-compose.ps1` | Docker + compose |
-| `scripts/backup-postgres.ps1` / `.sh` | Backup |
-| `scripts/restore-postgres.ps1` | Restore |
+| `scripts/deploy-release.sh` | Pull GHCR + migrate + up |
+| `scripts/backup-scheduled.sh` / `install-backup-cron.sh` | Backup agendado |
+| `scripts/install-backup-task.ps1` | Task Scheduler (Windows) |
+| `scripts/npm-audit-check.mjs` | Gate audit + allowlist |
+| `scripts/watch-ready.ps1` | Probe ready + webhook |

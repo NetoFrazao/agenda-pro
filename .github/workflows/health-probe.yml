@@ -1,0 +1,78 @@
+name: Health probe
+
+# Alerta real em /api/health/ready (SaaS uptime mínimo).
+# Secrets/vars: HEALTH_READY_URL (obrigatório no environment), HEALTH_ALERT_WEBHOOK_URL
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: health-probe
+  cancel-in-progress: true
+
+jobs:
+  probe:
+    name: Probe ready
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Check URL configured
+        id: cfg
+        env:
+          HEALTH_READY_URL_VAR: ${{ vars.HEALTH_READY_URL }}
+          HEALTH_READY_URL_SECRET: ${{ secrets.HEALTH_READY_URL }}
+        run: |
+          URL="${HEALTH_READY_URL_VAR:-$HEALTH_READY_URL_SECRET}"
+          if [ -z "$URL" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::HEALTH_READY_URL não configurado — probe skipped (configure repo var/secret)."
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+            echo "url=$URL" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: GET /api/health/ready
+        id: probe
+        if: steps.cfg.outputs.skip != 'true'
+        continue-on-error: true
+        env:
+          URL: ${{ steps.cfg.outputs.url }}
+        run: |
+          set +e
+          CODE=$(curl -sS -o /tmp/ready.body -w '%{http_code}' --max-time 10 "$URL" || echo 000)
+          echo "code=$CODE" >> "$GITHUB_OUTPUT"
+          echo "body<<EOF" >> "$GITHUB_OUTPUT"
+          head -c 500 /tmp/ready.body >> "$GITHUB_OUTPUT" || true
+          echo "" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+          if [ "$CODE" = "200" ]; then
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "ok=false" >> "$GITHUB_OUTPUT"
+          exit 1
+
+      - name: Alert webhook
+        if: steps.cfg.outputs.skip != 'true' && steps.probe.outputs.ok != 'true'
+        env:
+          HOOK: ${{ secrets.HEALTH_ALERT_WEBHOOK_URL }}
+          CODE: ${{ steps.probe.outputs.code }}
+          BODY: ${{ steps.probe.outputs.body }}
+          URL: ${{ steps.cfg.outputs.url }}
+        run: |
+          MSG="[Agenda Pro] health/ready FALHOU status=${CODE} url=${URL} body=${BODY}"
+          echo "$MSG"
+          if [ -n "$HOOK" ]; then
+            curl -fsS -X POST -H 'Content-Type: application/json' \
+              -d "$(jq -n --arg t "$MSG" '{text:$t,content:$t}')" \
+              "$HOOK"
+          else
+            echo "::warning::HEALTH_ALERT_WEBHOOK_URL ausente — falha só no Actions."
+          fi
+          exit 1
+
+      - name: Skipped notice
+        if: steps.cfg.outputs.skip == 'true'
+        run: echo "Probe não executado (configure HEALTH_READY_URL)."

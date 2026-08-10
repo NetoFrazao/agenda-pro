@@ -90,12 +90,10 @@ jobs:
           NEXT_PUBLIC_API_URL: http://localhost:3001
           NEXT_PUBLIC_APP_URL: http://localhost:3000
 
-      # Soft-fail consciente: highs restantes exigem next@16 (postcss/sharp) ou
-      # bump transitivo @nestjs/swagger→js-yaml. Gate duro quebraria o CI sem
-      # upgrade coordenado. Ver SCORECARD_DEVOPS.md / DEPLOYMENT.md.
-      - name: Dependency audit (high+; advisory)
-        run: npm audit --audit-level=high
-        continue-on-error: true
+      # Gate duro com allowlist versionada (ops/npm-audit-allowlist.json).
+      # Soft-fail silencioso removido — highs fora da lista ou expirados quebram CI.
+      - name: Dependency audit (allowlist)
+        run: node scripts/npm-audit-check.mjs
 
   docker-api:
     name: Docker build API
