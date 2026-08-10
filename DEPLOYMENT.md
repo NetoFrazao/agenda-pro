@@ -94,4 +94,4 @@ Audit: `npm run ops:audit` — highs fora da allowlist ou allowlist expirada **q
 
 1. Pino + redact (app).
 2. Uptime: `watch-ready.ps1` + `health-probe.yml`.
-3. Sentry: stub env + [`docs/ops/SENTRY.md`](./docs/ops/SENTRY.md) — SDK exige mudança em apps (fora deste escopo).
+3. Sentry: SDK em API/Web + [`docs/ops/SENTRY.md`](./docs/ops/SENTRY.md) — fail-soft sem DSN.

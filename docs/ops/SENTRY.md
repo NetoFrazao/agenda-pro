@@ -1,37 +1,52 @@
-# Sentry — Agenda Pro (ops stub)
+# Sentry — Agenda Pro
 
 ## Status
 
-SDK **não** está instalado em `apps/api` / `apps/web` neste ciclo (fora do escopo DevOps — exige código de app).
+SDK **instalado** em `apps/api` (`@sentry/nestjs`) e `apps/web` (`@sentry/nextjs`).
+Sem DSN: **fail-soft** — o processo sobe normalmente e não envia eventos.
 
-Este doc + variáveis em `.env.example` / compose preparam o caminho. Alertas de uptime **já** cobrem `/api/health/ready` via:
+Alertas de uptime continuam cobrindo `/api/health/ready` via:
 
 - `scripts/watch-ready.ps1` (+ Task Scheduler)
 - `.github/workflows/health-probe.yml` (cron 15 min + webhook)
 
-## Variáveis (reservadas)
+## Ativar
+
+1. Crie projetos no [Sentry](https://sentry.io/) (um para API Node, um para Next.js — ou um só se preferir).
+2. Preencha no host / `.env` / secrets do GitHub:
 
 | Var | Onde | Nota |
 |-----|------|------|
-| `SENTRY_DSN` | API / worker | Server-side Nest |
-| `SENTRY_ENVIRONMENT` | API / worker | `production` / `staging` |
-| `NEXT_PUBLIC_SENTRY_DSN` | Web | Browser; **breaking** se exposto sem consentimento de privacidade |
-| `SENTRY_AUTH_TOKEN` | CI (secret) | Só se houver upload de source maps |
+| `SENTRY_DSN` | API / worker (runtime) | Server-side Nest |
+| `SENTRY_ENVIRONMENT` | API / worker / build Web | Ex.: `production` |
+| `NEXT_PUBLIC_SENTRY_DSN` | Web (build + browser) | Público no bundle; alinhar privacidade/LGPD |
+| `SENTRY_AUTH_TOKEN` | CI/CD (secret) | Upload de source maps no build Web |
+| `SENTRY_ORG` / `SENTRY_PROJECT` | CI/CD (vars) | Slugs da org/projeto Sentry |
 
-Compose prod já interpola `SENTRY_DSN` / `SENTRY_ENVIRONMENT` (vazio = no-op até o SDK existir).
+3. Compose prod já interpola `SENTRY_DSN` / `SENTRY_ENVIRONMENT` para API/worker.
+4. Redeploy (ou `docker compose … up -d --build`).
 
-## Dependência de app (mínimo)
+### Source maps (Web)
 
-Quando Engineering/Frontend puder tocar apps:
+No workflow CD (`.github/workflows/cd.yml`), o build da imagem Web recebe `SENTRY_AUTH_TOKEN`, `SENTRY_ORG` e `SENTRY_PROJECT` quando configurados.
+Sem token, o build **não falha** — `next.config` desliga upload (`sourcemaps.disable`).
 
-1. API: `@sentry/nestjs` (ou `@sentry/node`) no bootstrap + `SENTRY_DSN`.
-2. Web: `@sentry/nextjs` + `NEXT_PUBLIC_SENTRY_DSN`.
-3. Sample rate baixo (ex. 0.1) em produção; redigir PII alinhado ao Pino.
+Para upload local: `SENTRY_AUTH_TOKEN=… SENTRY_ORG=… SENTRY_PROJECT=… npm run build -w @agenda-pro/web`.
 
-Até lá: **não** tratar ausência de Sentry como falha de deploy.
+## Comportamento no código
 
-## Alerta “real” hoje
+- **API:** `apps/api/src/instrument.ts` (importado em `main.ts` / `worker.ts`) + `SentryModule` + `@SentryExceptionCaptured` no filtro global.
+- **Web:** `instrumentation.ts` / `instrumentation-client.ts`, configs server/edge, `global-error.tsx`, `withSentryConfig`.
+- Sample rate de traces: `0.1` em production, `1.0` fora.
+- `sendDefaultPii: false` (sem PII default).
 
-1. Repo → Settings → Secrets: `HEALTH_ALERT_WEBHOOK_URL` (Slack/Discord).
+## Alerta ready (sem Sentry)
+
+1. Repo → Settings → Secrets: `HEALTH_ALERT_WEBHOOK_URL`.
 2. Vars: `HEALTH_READY_URL=https://seu-dominio/api/health/ready`.
 3. Workflow `Health probe` falha o job e posta no webhook se status ≠ 200.
+
+## CI — scan de imagens
+
+Jobs `docker-api` / `docker-web` rodam **Trivy** (`CRITICAL,HIGH`, `ignore-unfixed`) após o build.
+Imagens base `node:20-alpine` estão pinadas por digest nos Dockerfiles.

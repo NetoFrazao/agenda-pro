@@ -106,6 +106,15 @@ jobs:
       - name: Build API image
         run: docker build -f apps/api/Dockerfile -t agenda-pro-api:ci .
 
+      - name: Trivy scan API image
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: agenda-pro-api:ci
+          format: table
+          exit-code: '1'
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+
   docker-web:
     name: Docker build Web
     runs-on: ubuntu-latest
@@ -120,3 +129,12 @@ jobs:
           --build-arg NEXT_PUBLIC_API_URL=http://localhost:3001
           --build-arg NEXT_PUBLIC_APP_URL=http://localhost:3000
           -t agenda-pro-web:ci .
+
+      - name: Trivy scan Web image
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: agenda-pro-web:ci
+          format: table
+          exit-code: '1'
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true

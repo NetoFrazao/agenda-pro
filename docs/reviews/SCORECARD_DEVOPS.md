@@ -9,7 +9,7 @@
 
 ## Veredito
 
-Ops passou de “CI + compose prod HTTP” para **CD GHCR + migrate no release**, **TLS Caddy**, **backup agendado com alerta**, **restore drill CI**, **audit allowlist dura** e **probe ready com webhook**. Ainda **não é 10/10**: Sentry SDK depende de app code; CD SSH precisa secrets no ambiente real; cifrar dumps / PITR e Trivy/digest pin ficam para o próximo ciclo.
+Ops passou de “CI + compose prod HTTP” para **CD GHCR + migrate no release**, **TLS Caddy**, **backup agendado com alerta**, **restore drill CI**, **audit allowlist dura** e **probe ready com webhook**. Sentry SDK + Trivy/digest pin foram fechados no ciclo de observabilidade (`SCORECARD_OBSERVABILITY.md`). Ainda **não é 10/10**: CD SSH precisa secrets no ambiente real; cifrar dumps / PITR e exercise Sentry em prod ficam abertos.
 
 ---
 
@@ -21,7 +21,7 @@ Ops passou de “CI + compose prod HTTP” para **CD GHCR + migrate no release**
 | Backup off-host agendado + alerta + drill | Alto | **Feito** (cron/Task installers, `backup-scheduled.sh`, alertas, `restore-drill.yml`) |
 | TLS na frente api/web (Caddy) | Alto | **Feito** (`docker-compose.tls.yml`, `deploy/Caddyfile`) |
 | `npm audit` allowlist versionada (sem soft-fail) | Médio | **Feito** (`ops/npm-audit-allowlist.json`, `scripts/npm-audit-check.mjs`) |
-| Sentry mínimo + alerta ready | Médio | **Parcial** — probe Actions + webhook **feito**; Sentry = stub env/docs (`docs/ops/SENTRY.md`); SDK **fora de escopo** (apps) |
+| Sentry mínimo + alerta ready | Médio | **Feito (R4)** — probe + webhook; SDK real em API/Web (`docs/ops/SENTRY.md`, `SCORECARD_OBSERVABILITY.md`) |
 | Organizar reviews na raiz → `docs/reviews/` | Baixo | **Feito** |
 
 ### Escopo / não tocado
@@ -54,7 +54,7 @@ Ops passou de “CI + compose prod HTTP” para **CD GHCR + migrate no release**
 | Logs | **7.5** | Pino (app); sem agregação |
 | Backup / DR | **8.5** | Cron/Task + off-host + alerta + drill CI |
 | Secrets | **8.0** | Prod fail-fast; GHCR via GITHUB_TOKEN |
-| Observabilidade | **6.5** | Ready alerts reais; Sentry stub only |
+| Observabilidade | **8.0** | Sentry SDK + ready alerts; ver `SCORECARD_OBSERVABILITY.md` |
 
 ---
 
@@ -73,8 +73,8 @@ Ops passou de “CI + compose prod HTTP” para **CD GHCR + migrate no release**
 
 ## Blockers para ≥ 9.5 / 10
 
-1. Instalar Sentry SDK em API/Web (outro ownership) + source maps no CD  
-2. Trivy/grype no CI + pin de digest nas imagens base  
+1. ~~Instalar Sentry SDK~~ → feito em R4 (`cursor/agent-observability-r4`); falta exercitar DSN + source maps em produção real  
+2. ~~Trivy/grype no CI + pin de digest~~ → feito em R4  
 3. Criptografia at-rest dos dumps + upload S3 nativo  
 4. Ambiente `production` GitHub com `DEPLOY_*` + `HEALTH_READY_URL` reais exercitados  
 5. Expirar allowlist Next (upgrade major coordenado)

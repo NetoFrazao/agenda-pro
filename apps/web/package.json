@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@agenda-pro/shared": "*",
+    "@sentry/nextjs": "^10.69.0",
     "next": "^15.1.6",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"

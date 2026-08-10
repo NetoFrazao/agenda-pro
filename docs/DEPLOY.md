@@ -22,7 +22,7 @@ Copie de `.env.example`. Em produção gere segredos longos:
 - `CORS_ORIGIN` = URL do frontend (HTTPS)
 - `APP_PUBLIC_URL`, `API_PUBLIC_URL`
 - `PLAN_*_PRICE_CENTS` (placeholders até validar preço)
-- Opcional: `STRIPE_*`, `SMTP_*`, `SENTRY_DSN` (SDK pendente — `docs/ops/SENTRY.md`)
+- Opcional: `STRIPE_*`, `SMTP_*`, `SENTRY_DSN` / `NEXT_PUBLIC_SENTRY_DSN` (`docs/ops/SENTRY.md`)
 
 ## CD self-host (recomendado para compose)
 

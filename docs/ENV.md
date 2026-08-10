@@ -74,4 +74,5 @@ Fonte canônica de exemplos: [`.env.example`](../.env.example).
 | `BACKUP_ALERT_WEBHOOK_URL` | Alerta específico de backup (fallback: health webhook) |
 | `TLS_DOMAIN` / `CADDY_EMAIL` | Compose TLS (`docker-compose.tls.yml`) |
 | `API_IMAGE` / `WEB_IMAGE` | Tags GHCR no deploy (`scripts/deploy-release.sh`) |
-| `SENTRY_DSN` / `SENTRY_ENVIRONMENT` / `NEXT_PUBLIC_SENTRY_DSN` | Reservadas — SDK ainda não no app; ver [ops/SENTRY.md](./ops/SENTRY.md) |
+| `SENTRY_DSN` / `SENTRY_ENVIRONMENT` / `NEXT_PUBLIC_SENTRY_DSN` | Sentry SDK (fail-soft se vazio); ver [ops/SENTRY.md](./ops/SENTRY.md) |
+| `SENTRY_AUTH_TOKEN` / `SENTRY_ORG` / `SENTRY_PROJECT` | Upload de source maps no build Web / CD (opcional) |

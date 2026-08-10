@@ -1,8 +1,11 @@
 # syntax=docker/dockerfile:1
 # Multi-stage API image — build no monorepo, runtime non-root.
 # Build (raiz do repo): docker build -f apps/api/Dockerfile -t agenda-pro-api .
+# Base pin: node:20-alpine multi-arch index (hub, 2026-04-15).
 
-FROM node:20-alpine AS deps
+ARG NODE_IMAGE=node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293
+
+FROM ${NODE_IMAGE} AS deps
 WORKDIR /app
 RUN apk add --no-cache openssl
 COPY package.json package-lock.json ./
@@ -11,7 +14,7 @@ COPY apps/web/package.json ./apps/web/
 COPY packages/shared/package.json ./packages/shared/
 RUN npm ci
 
-FROM node:20-alpine AS build
+FROM ${NODE_IMAGE} AS build
 WORKDIR /app
 RUN apk add --no-cache openssl
 COPY --from=deps /app/node_modules ./node_modules
@@ -25,7 +28,7 @@ RUN npm run build -w @agenda-pro/shared \
   && npm run build -w @agenda-pro/api \
   && npm prune --omit=dev
 
-FROM node:20-alpine AS runner
+FROM ${NODE_IMAGE} AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 RUN apk add --no-cache openssl wget \

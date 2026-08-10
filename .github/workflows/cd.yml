@@ -103,6 +103,11 @@ jobs:
           build-args: |
             NEXT_PUBLIC_API_URL=${{ steps.web-env.outputs.api_url }}
             NEXT_PUBLIC_APP_URL=${{ steps.web-env.outputs.app_url }}
+            NEXT_PUBLIC_SENTRY_DSN=${{ secrets.NEXT_PUBLIC_SENTRY_DSN }}
+            SENTRY_AUTH_TOKEN=${{ secrets.SENTRY_AUTH_TOKEN }}
+            SENTRY_ORG=${{ vars.SENTRY_ORG }}
+            SENTRY_PROJECT=${{ vars.SENTRY_PROJECT }}
+            SENTRY_ENVIRONMENT=${{ vars.SENTRY_ENVIRONMENT }}
           tags: |
             ${{ steps.meta-web.outputs.image }}
             ${{ steps.meta-web.outputs.base }}:latest
