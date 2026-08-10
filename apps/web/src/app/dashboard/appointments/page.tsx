@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/components/AuthProvider';
 import {
@@ -11,7 +12,7 @@ import {
   Input,
   PageTitle,
   Select,
-  Spinner,
+  SkeletonList,
   StatusBadge,
 } from '@/components/ui';
 import { api, ApiError } from '@/lib/api';
@@ -139,7 +140,7 @@ function RebookingBanner({
             )}`}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex min-h-11 items-center justify-center rounded-xl bg-mint-deep px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90"
+            className="inline-flex min-h-11 items-center justify-center rounded-xl bg-mint-deep px-4 py-2 text-sm font-semibold text-white transition hover:bg-mint-hover"
           >
             Remarcar no WhatsApp
           </a>
@@ -368,10 +369,24 @@ export default function AppointmentsPage() {
       ) : null}
 
       {loading ? (
-        <Spinner label="Carregando agenda…" />
+        <SkeletonList rows={5} />
       ) : sorted.length === 0 ? (
-        <EmptyState title="Nenhum horário neste período">
-          Ajuste o filtro de datas ou compartilhe seu link público.
+        <EmptyState
+          title="Nenhum horário neste período"
+          action={
+            <div className="flex flex-wrap justify-center gap-2">
+              <Button type="button" variant="secondary" onClick={applyFilter}>
+                Atualizar filtro
+              </Button>
+              <Link href="/dashboard">
+                <Button type="button" variant="ghost">
+                  Ir à visão geral
+                </Button>
+              </Link>
+            </div>
+          }
+        >
+          Ajuste as datas ou compartilhe o link público para receber novos agendamentos.
         </EmptyState>
       ) : (
         <>

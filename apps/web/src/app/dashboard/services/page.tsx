@@ -130,13 +130,13 @@ export default function ServicesPage() {
     }
   }
 
-  if (loading) return <Spinner />;
+  if (loading) return <Spinner label="Carregando serviços…" />;
 
   return (
-    <div>
+    <div className="animate-fade-up">
       <PageTitle
         title="Serviços"
-        description="Defina o que você oferece, duração, preço e sinal (opcional)."
+        description="O que você oferece: duração, preço e sinal (opcional)."
       />
       {error ? (
         <div className="mb-4">
@@ -220,7 +220,20 @@ export default function ServicesPage() {
       </form>
 
       {services.length === 0 ? (
-        <EmptyState>Nenhum serviço cadastrado ainda.</EmptyState>
+        <EmptyState
+          title="Nenhum serviço ainda"
+          action={
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => document.getElementById('svc-name')?.focus()}
+            >
+              Cadastrar o primeiro
+            </Button>
+          }
+        >
+          Use o formulário acima. Sem serviço ativo, a página pública não mostra horários.
+        </EmptyState>
       ) : (
         <ul className="space-y-3">
           {services.map((s) => (

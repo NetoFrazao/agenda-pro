@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/components/AuthProvider';
 import { Alert, Button, EmptyState, Field, Input, PageTitle, Spinner } from '@/components/ui';
@@ -66,10 +67,10 @@ export default function ReportsPage() {
   const totals = data?.totals;
 
   return (
-    <div>
+    <div className="animate-fade-up">
       <PageTitle
         title="Relatórios"
-        description="Resumo financeiro e operacional do período (receita considera atendimentos concluídos)."
+        description="Caixa e operação do período (receita só conta atendimentos concluídos)."
       />
 
       <div className="surface-elevated mb-6 flex flex-col gap-3 rounded-2xl p-4 sm:flex-row sm:items-end">
@@ -96,9 +97,18 @@ export default function ReportsPage() {
       ) : null}
 
       {loading ? (
-        <Spinner />
+        <Spinner label="Carregando relatório…" />
       ) : !data || !totals ? (
-        <EmptyState>Sem dados para o período.</EmptyState>
+        <EmptyState
+          title="Sem dados no período"
+          action={
+            <Button type="button" variant="secondary" onClick={() => void applyFilter()}>
+              Atualizar
+            </Button>
+          }
+        >
+          Amplie as datas ou conclua atendimentos na agenda para ver faturamento aqui.
+        </EmptyState>
       ) : (
         <div className="space-y-10">
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -147,7 +157,16 @@ export default function ReportsPage() {
             <h2 className="font-display text-xl font-semibold text-ink">Top serviços</h2>
             {data.topServices.length === 0 ? (
               <div className="mt-4">
-                <EmptyState>Nenhum atendimento concluído no período.</EmptyState>
+                <EmptyState
+                  title="Sem serviços no topo"
+                  action={
+                    <Link href="/dashboard/appointments">
+                      <Button variant="secondary">Abrir agenda</Button>
+                    </Link>
+                  }
+                >
+                  Conclua atendimentos no período para ranquear os serviços.
+                </EmptyState>
               </div>
             ) : (
               <div className="mt-4 overflow-x-auto rounded-2xl bg-white ring-1 ring-line">
@@ -183,7 +202,9 @@ export default function ReportsPage() {
             <h2 className="font-display text-xl font-semibold text-ink">Por profissional</h2>
             {data.byProfessional.length === 0 ? (
               <div className="mt-4">
-                <EmptyState>Nenhum atendimento concluído no período.</EmptyState>
+                <EmptyState title="Sem dados por profissional">
+                  Conclua atendimentos no período para ver receita e comissão por pessoa.
+                </EmptyState>
               </div>
             ) : (
               <div className="mt-4 overflow-x-auto rounded-2xl bg-white ring-1 ring-line">

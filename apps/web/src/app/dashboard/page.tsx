@@ -19,11 +19,41 @@ import {
   addDaysYmd,
   formatBRL,
   formatDateTime,
+  formatPercent,
+  formatTime,
   todayYmdInTimeZone,
   ymdInTimeZone,
   zonedDayBoundsIso,
 } from '@/lib/format';
 import type { Appointment, AppointmentListResponse, ReportsSummary, Service } from '@/lib/types';
+
+function AppointmentRow({
+  appointment: a,
+  timezone,
+  timeOnly,
+}: {
+  appointment: Appointment;
+  timezone?: string;
+  timeOnly?: boolean;
+}) {
+  return (
+    <li className="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="font-semibold text-ink">{a.client?.name || 'Cliente'}</p>
+          <StatusBadge status={a.status} />
+        </div>
+        <p className="mt-1 text-sm text-muted">
+          {a.service?.name || 'Serviço'}
+          {a.professional?.name ? ` · ${a.professional.name}` : ''}
+        </p>
+      </div>
+      <p className="shrink-0 text-sm font-medium tabular-nums text-ink-soft">
+        {timeOnly ? formatTime(a.startsAt, timezone) : formatDateTime(a.startsAt, timezone)}
+      </p>
+    </li>
+  );
+}
 
 function UpcomingList({
   items,
@@ -33,19 +63,25 @@ function UpcomingList({
   previewLen,
   needsOnboarding,
   publicUrl,
+  timeOnly,
+  emptyTitle,
+  emptyBody,
 }: {
   items: Appointment[];
   timezone?: string;
-  truncated: boolean;
-  total: number;
-  previewLen: number;
+  truncated?: boolean;
+  total?: number;
+  previewLen?: number;
   needsOnboarding: boolean;
   publicUrl: string | null;
+  timeOnly?: boolean;
+  emptyTitle: string;
+  emptyBody: string;
 }) {
   if (items.length === 0) {
     return (
       <EmptyState
-        title="Agenda livre"
+        title={emptyTitle}
         action={
           needsOnboarding ? (
             <Link href="/dashboard/services">
@@ -55,12 +91,14 @@ function UpcomingList({
             <Link href={publicUrl} target="_blank">
               <Button variant="secondary">Abrir página pública</Button>
             </Link>
-          ) : undefined
+          ) : (
+            <Link href="/dashboard/appointments">
+              <Button variant="secondary">Ver agenda</Button>
+            </Link>
+          )
         }
       >
-        {needsOnboarding
-          ? 'Crie um serviço e compartilhe seu link para receber o primeiro horário.'
-          : 'Nenhum horário nos próximos 7 dias. Compartilhe seu link para encher a semana.'}
+        {emptyBody}
       </EmptyState>
     );
   }
@@ -69,32 +107,15 @@ function UpcomingList({
     <>
       <ul className="surface-elevated divide-y divide-paper-2 overflow-hidden rounded-2xl">
         {items.map((a) => (
-          <li
-            key={a.id}
-            className="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5"
-          >
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <p className="font-semibold text-ink">{a.client?.name || 'Cliente'}</p>
-                <StatusBadge status={a.status} />
-              </div>
-              <p className="mt-1 text-sm text-muted">
-                {a.service?.name || 'Serviço'}
-                {a.professional?.name ? ` · ${a.professional.name}` : ''}
-              </p>
-            </div>
-            <p className="shrink-0 text-sm font-medium tabular-nums text-ink-soft">
-              {formatDateTime(a.startsAt, timezone)}
-            </p>
-          </li>
+          <AppointmentRow key={a.id} appointment={a} timezone={timezone} timeOnly={timeOnly} />
         ))}
       </ul>
-      {truncated || previewLen > items.length ? (
+      {truncated || (previewLen != null && previewLen > items.length) ? (
         <p className="mt-3 text-sm text-muted">
           Lista mostra os próximos {items.length}
-          {truncated
+          {truncated && total != null
             ? ` · ${total} no período (paginado)`
-            : previewLen > items.length
+            : previewLen != null && previewLen > items.length
               ? ` de ${previewLen} ativos`
               : ''}
           .
@@ -159,7 +180,16 @@ export default function DashboardOverviewPage() {
   }, [timezone, me?.tenant?.timezone, isMember]);
 
   if (loading) return <PageSkeleton />;
-  if (error) return <Alert>{error}</Alert>;
+  if (error) {
+    return (
+      <div className="space-y-3">
+        <Alert>{error}</Alert>
+        <Button variant="secondary" size="sm" onClick={() => window.location.reload()}>
+          Tentar de novo
+        </Button>
+      </div>
+    );
+  }
 
   const publicUrl = me?.tenant?.slug ? `/u/${me.tenant.slug}` : null;
   const origin = typeof window !== 'undefined' ? window.location.origin : '';
@@ -171,20 +201,26 @@ export default function DashboardOverviewPage() {
   const upcomingAll = appointments
     .filter((a) => a.status !== 'CANCELLED' && a.status !== 'NO_SHOW')
     .sort((a, b) => +new Date(a.startsAt) - +new Date(b.startsAt));
-  const upcomingPreview = upcomingAll.slice(0, 6);
   // Com activeOnly=true, `total` da API já exclui CANCELLED/NO_SHOW (mesmo critério do filtro local).
   const upcomingWeekCount = appointmentsTruncated ? appointmentsTotal : upcomingAll.length;
 
   const tz = timezone || me?.tenant?.timezone;
   const todayKey = todayYmdInTimeZone(tz);
-  const todayCount = appointments.filter((a) => {
-    if (a.status === 'CANCELLED') return false;
+
+  function isToday(a: Appointment) {
     try {
       return ymdInTimeZone(new Date(a.startsAt), tz || 'UTC') === todayKey;
     } catch {
       return new Date(a.startsAt).toDateString() === new Date().toDateString();
     }
-  }).length;
+  }
+
+  const todayAppointments = upcomingAll.filter(isToday);
+  const laterAppointments = upcomingAll.filter((a) => !isToday(a)).slice(0, 6);
+
+  const monthAppointments = summary?.totals.appointments ?? 0;
+  const monthCompleted = summary?.totals.completed ?? 0;
+  const occupancyRate = monthAppointments > 0 ? monthCompleted / monthAppointments : 0;
 
   async function copyLink() {
     if (!shareLink) return;
@@ -197,7 +233,7 @@ export default function DashboardOverviewPage() {
     <div className="animate-fade-up">
       <PageTitle
         title={`Olá, ${me?.user?.name?.split(' ')[0] || 'profissional'}`}
-        description={`${me?.tenant?.name || 'Seu negócio'} · o que importa agora`}
+        description={`${me?.tenant?.name || 'Seu negócio'} · agenda e caixa do dia`}
         action={
           publicUrl && !isMember ? (
             <div className="flex flex-wrap gap-2">
@@ -225,41 +261,84 @@ export default function DashboardOverviewPage() {
       {isMember ? (
         <div className="mb-6">
           <Alert tone="info">
-            Você está vendo apenas os seus agendamentos. O CRM completo fica com o dono da conta.
+            Você vê só os seus horários. Clientes, relatórios e planos ficam com o dono da conta.
           </Alert>
         </div>
       ) : null}
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard accent label="Hoje" value={todayCount} hint="agendamentos ativos" />
-        <StatCard
-          label="Próximos 7 dias"
-          value={upcomingWeekCount}
-          hint={
-            <Link
-              href="/dashboard/appointments"
-              className="font-medium text-mint-deep hover:underline"
-            >
-              {appointmentsTruncated ? 'ver agenda (ativos)' : 'ativos · abrir agenda'}
-            </Link>
+      <section className="mt-2">
+        <div className="mb-4 flex items-end justify-between gap-3">
+          <div>
+            <h2 className="font-display text-xl font-semibold text-ink">Hoje</h2>
+            <p className="mt-1 text-sm text-muted">
+              {todayAppointments.length === 0
+                ? 'Nenhum horário ativo ainda'
+                : `${todayAppointments.length} horário${todayAppointments.length === 1 ? '' : 's'} na agenda`}
+            </p>
+          </div>
+          <Link
+            href="/dashboard/appointments"
+            className="text-sm font-medium text-mint-deep hover:underline"
+          >
+            Abrir agenda
+          </Link>
+        </div>
+        <UpcomingList
+          items={todayAppointments}
+          timezone={tz}
+          needsOnboarding={needsOnboarding}
+          publicUrl={publicUrl}
+          timeOnly
+          emptyTitle="Dia livre"
+          emptyBody={
+            needsOnboarding
+              ? 'Crie um serviço e compartilhe o link para encher a agenda de hoje.'
+              : 'Nada marcado para hoje. Compartilhe seu link ou abra a agenda da semana.'
           }
         />
+      </section>
+
+      <div className="mt-8 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <StatCard accent label="Hoje" value={todayAppointments.length} hint="horários ativos" />
         {!isMember ? (
           <StatCard
             label="Faturamento do mês"
             value={formatBRL(summary?.totals.revenueCents ?? 0)}
-            hint={`${summary?.totals.completed ?? 0} concluídos`}
+            hint={`${monthCompleted} concluídos`}
           />
         ) : (
           <StatCard label="Seu papel" value="Membro" hint="agenda própria" />
         )}
+        {!isMember ? (
+          <StatCard
+            label="Ocupação do mês"
+            value={formatPercent(occupancyRate, 0)}
+            hint="concluídos / agendados"
+          />
+        ) : (
+          <StatCard
+            label="Próximos 7 dias"
+            value={upcomingWeekCount}
+            hint={
+              <Link
+                href="/dashboard/appointments"
+                className="font-medium text-mint-deep hover:underline"
+              >
+                abrir agenda
+              </Link>
+            }
+          />
+        )}
         <StatCard
-          label="Serviços ativos"
-          value={activeServices.length}
+          label={!isMember ? 'Próximos 7 dias' : 'Serviços ativos'}
+          value={!isMember ? upcomingWeekCount : activeServices.length}
           hint={
             !isMember ? (
-              <Link href="/dashboard/services" className="font-medium text-mint-deep hover:underline">
-                Gerenciar
+              <Link
+                href="/dashboard/appointments"
+                className="font-medium text-mint-deep hover:underline"
+              >
+                {appointmentsTruncated ? 'ver agenda (ativos)' : 'ativos · abrir agenda'}
               </Link>
             ) : (
               'da equipe'
@@ -272,7 +351,7 @@ export default function DashboardOverviewPage() {
         <div className="surface-elevated mt-6 flex flex-col gap-3 rounded-2xl p-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0">
             <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted">
-              Seu link no bio / WhatsApp
+              Link para bio e WhatsApp
             </p>
             <p className="mt-1 truncate font-mono text-sm text-ink">{shareLink}</p>
           </div>
@@ -282,7 +361,7 @@ export default function DashboardOverviewPage() {
 
       <section className="mt-10">
         <div className="mb-4 flex items-end justify-between gap-3">
-          <h2 className="font-display text-xl font-semibold text-ink">Próximos atendimentos</h2>
+          <h2 className="font-display text-xl font-semibold text-ink">Próximos dias</h2>
           <Link
             href="/dashboard/appointments"
             className="text-sm font-medium text-mint-deep hover:underline"
@@ -291,13 +370,19 @@ export default function DashboardOverviewPage() {
           </Link>
         </div>
         <UpcomingList
-          items={upcomingPreview}
+          items={laterAppointments}
           timezone={tz}
           truncated={appointmentsTruncated}
           total={appointmentsTotal}
-          previewLen={upcomingAll.length}
+          previewLen={upcomingAll.filter((a) => !isToday(a)).length}
           needsOnboarding={needsOnboarding}
           publicUrl={publicUrl}
+          emptyTitle="Semana tranquila"
+          emptyBody={
+            needsOnboarding
+              ? 'Crie um serviço e compartilhe seu link para receber o primeiro horário.'
+              : 'Nada além de hoje nos próximos 7 dias. Compartilhe o link para encher a semana.'
+          }
         />
       </section>
     </div>

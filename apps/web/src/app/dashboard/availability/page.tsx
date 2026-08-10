@@ -198,11 +198,22 @@ export default function AvailabilityPage() {
       </form>
 
       {sorted.length === 0 ? (
-        <EmptyState>
-          Nenhuma regra de disponibilidade. Sem regras, a página pública não terá horários.
+        <EmptyState
+          title="Sem horários de atendimento"
+          action={
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => document.getElementById('day')?.focus()}
+            >
+              Definir primeiro horário
+            </Button>
+          }
+        >
+          Sem regras semanais, a página pública não mostra vagas. Use o formulário acima.
         </EmptyState>
       ) : (
-        <ul className="divide-y divide-line overflow-hidden rounded-lg bg-white ring-1 ring-line">
+        <ul className="divide-y divide-line overflow-hidden rounded-2xl bg-white ring-1 ring-line">
           {sorted.map((rule) => (
             <li key={rule.id} className="flex items-center justify-between gap-3 px-4 py-3">
               <div>
@@ -298,9 +309,11 @@ export default function AvailabilityPage() {
 
         <div className="mt-5">
           {exceptions.length === 0 ? (
-            <EmptyState>Nenhuma folga ou feriado cadastrado.</EmptyState>
+            <EmptyState title="Nenhuma folga cadastrada">
+              Use o formulário acima para bloquear feriados ou abrir janelas especiais.
+            </EmptyState>
           ) : (
-            <ul className="divide-y divide-line overflow-hidden rounded-lg bg-white ring-1 ring-line">
+            <ul className="divide-y divide-line overflow-hidden rounded-2xl bg-white ring-1 ring-line">
               {exceptions.map((exc) => (
                 <li key={exc.id} className="flex items-center justify-between gap-3 px-4 py-3">
                   <div>

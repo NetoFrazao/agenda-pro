@@ -55,10 +55,10 @@ export default function WaitlistPage() {
   }
 
   return (
-    <div>
+    <div className="animate-fade-up">
       <PageTitle
         title="Lista de espera"
-        description="Clientes aguardando vaga em dias lotados. Eles são avisados automaticamente quando um horário abre."
+        description="Quem aguarda vaga em dias lotados. Aviso automático quando um horário abre."
       />
 
       <div className="mb-6 flex flex-col gap-3 surface-elevated rounded-2xl p-4 sm:flex-row sm:items-end">
@@ -79,10 +79,21 @@ export default function WaitlistPage() {
       ) : null}
 
       {loading ? (
-        <Spinner />
+        <Spinner label="Carregando espera…" />
       ) : items.length === 0 ? (
-        <EmptyState>
-          {date ? 'Ninguém na lista de espera para este dia.' : 'Ninguém na lista de espera.'}
+        <EmptyState
+          title={date ? 'Ninguém neste dia' : 'Lista de espera vazia'}
+          action={
+            date ? (
+              <Button type="button" variant="secondary" onClick={() => setDate('')}>
+                Ver todos os dias
+              </Button>
+            ) : undefined
+          }
+        >
+          {date
+            ? 'Ninguém aguardando vaga nesta data.'
+            : 'Clientes entram na espera quando o dia lotar na página pública.'}
         </EmptyState>
       ) : (
         <ul className="space-y-3">
@@ -112,7 +123,7 @@ export default function WaitlistPage() {
                   href={whatsappLink(entry.clientPhone)}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center justify-center gap-2 rounded-md bg-emerald-700 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-800"
+                  className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-mint-deep px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-mint-hover"
                 >
                   Chamar no WhatsApp
                 </a>

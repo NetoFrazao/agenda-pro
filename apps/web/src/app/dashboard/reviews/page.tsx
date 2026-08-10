@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/components/AuthProvider';
 import { Alert, Badge, Button, EmptyState, PageTitle, Spinner, Stars } from '@/components/ui';
@@ -61,8 +62,15 @@ export default function ReviewsPage() {
       ) : null}
 
       {items.length === 0 ? (
-        <EmptyState>
-          Nenhuma avaliação ainda. Clientes podem avaliar após um atendimento concluído.
+        <EmptyState
+          title="Nenhuma avaliação ainda"
+          action={
+            <Link href="/dashboard/appointments">
+              <Button variant="secondary">Abrir agenda</Button>
+            </Link>
+          }
+        >
+          Clientes podem avaliar depois de um atendimento concluído.
         </EmptyState>
       ) : (
         <ul className="space-y-3">
