@@ -1,114 +1,78 @@
 # SCORECARD — Frontend + UI/UX (ciclo produção)
 
-**Data:** 2026-08-09  
-**Branch:** `cursor/agent-frontend`  
-**Escopo:** `apps/web/src/**` (+ este scorecard)  
-**Baseline ciclo anterior:** FRONTEND 7.4 · UX 7.8 · composta 7.5  
+**Data:** 2026-08-10  
+**Branch:** `cursor/agent-frontend-r4`  
+**Escopo:** `apps/web/src/**` (+ patch opcional `activeOnly` em list appointments) + este scorecard  
+**Baseline Round 3:** FRONTEND 8.2 · UX 8.4 · composta 8.3  
 
 ---
 
-## Nota honesta deste ciclo
+## Nota honesta deste ciclo (Round 4)
 
 | Dimensão | Antes | Depois | Comentário |
 |----------|------:|-------:|------------|
-| Frontend (contrato / bugs) | 7.4 | **8.2** | AuthProvider único; filtros de data no TZ do tenant; SSR metadata pública |
-| UX / a11y | 7.8 | **8.4** | SlotListbox teclado; wizard onboarding; empty/CRM gate para MEMBER |
-| Design system Graphite | ~6 | **9.0** | `stone-*` removido das pages; hex/teal legados → tokens ink/mint/line |
-| Ativação (produto) | 6.5 | **8.0** | Wizard 3 passos (serviço → horários → compartilhar) |
+| Frontend (contrato / bugs) | 8.2 | **8.4** | StatCard 7 dias não usa mais `total` bruto (que incluía cancelados) |
+| UX / a11y | 8.4 | **8.7** | StarPicker teclado; focus trap compartilhado; cancel/remarcar em Modal; Field error= auth |
+| Design system Graphite | 9.0 | **9.0** | Sem reabrir migração R3 |
+| Ativação (produto) | 8.0 | **8.0** | Sem mudança |
 
-**Nota composta do ciclo: 8.3 / 10**
+**Nota composta do ciclo: 8.5 / 10**
 
-Não é 9+: testes web ainda no-op; StarPicker teclado aberto; `User.role` ainda `string?` no contrato tipado.
+Não é 9+: testes web ainda no-op; `User.role` tipagem formal fica com Backend AuthZ R4; total server-side “ativos” ainda depende de merge do patch `activeOnly`.
 
 ---
 
-## Fixes entregues (backlog)
+## Fixes entregues (Round 4)
 
-### [Alto] Migração Graphite — `stone-*`
-- Removidas utilidades `stone-*` remanescentes em dashboard (services, billing, settings, team, waitlist, availability, reports, reviews), legal (termos/privacidade) e booking.
-- Hex ad-hoc (`#6b736e`, `#d5dbd6`, …) e `teal-*` de UI → tokens Graphite (`muted`, `line`, `mint-deep`, `success-bg`).
-- Surfaces legadas `rounded-lg … ring-stone` → `surface-elevated rounded-2xl` onde aplicável.
+### [Baixo] Teclado no `StarPicker`
+- Roving `tabIndex` + ArrowLeft/Right/Up/Down, Home/End, Enter/Espaço no radiogroup de avaliação (`agendamento/[token]`).
 
-### [Alto] Componentização monólitos
-- `dashboard/page.tsx`: `UpcomingList` + `OnboardingWizard` + dados via `useAuth`.
-- `dashboard/appointments/page.tsx`: `AppointmentFilters`, `AppointmentCard`, `RebookingBanner`.
-- Novo `SlotListbox` compartilhado (booking público + remarcar).
+### [Baixo] Focus trap em overlays além de Modal/menu
+- Hook compartilhado `lib/useFocusTrap.ts` (`getFocusable` + trap Tab/Escape/restore/scroll).
+- `Modal` e menu mobile do `DashboardShell` passam a usar o hook.
+- Painéis de **cancelar** e **remarcar** (manage token) viraram `Modal` — passam a ter trap de foco.
 
-### [Médio] AuthProvider centralizado
-- `components/AuthProvider.tsx` + `useAuth()`; shell faz um único `/api/auth/me`.
-- Pages (dashboard, agenda, clients, reviews, billing, settings, reports) consomem contexto — sem probe duplicado.
-- Nav MEMBER: esconde itens `ownerOnly` (clientes, serviços, equipe, relatórios, planos).
+### [Baixo] `Field error=` padronizado nos forms de auth
+- Login, register, esqueci-senha e redefinir-senha: validação client + `Field error=`.
+- Helper `lib/authFieldErrors.ts` mapeia mensagens Nest/401 para campos; Alert só para erros genéricos.
 
-### [Médio] Listbox de horários (a11y)
-- Setas, Home/End, Enter/Espaço, roving `tabIndex`, `aria-activedescendant`.
-
-### [Médio] Filtros de data no timezone do tenant
-- Helpers em `lib/format.ts`: `todayYmdInTimeZone`, `ymdInTimeZone`, `addDaysYmd`, `zonedWallTimeToIso`, `zonedDayBoundsIso`, `firstDayOfMonthYmdInTimeZone`.
-- Agenda, dashboard (janela 7 dias / “hoje”) e relatórios usam bounds no fuso do tenant, não `Date` local do browser.
-
-### [Médio] Wizard pós-cadastro
-- `OnboardingWizard`: 3 passos com progressão e dismiss em `localStorage`.
-
-### [Baixo] SSR / `generateMetadata` em `/u/[slug]`
-- `page.tsx` server: `generateMetadata` + fetch público (revalidate 60s).
-- UI em `PublicBookingClient.tsx` (CSR do fluxo de booking).
+### [Baixo] StatCard 7 dias — só ativos (honesto no client)
+- Contagem = itens da página **excluindo** `CANCELLED` / `NO_SHOW`.
+- Se a lista está truncada (`total > pageSize`), o card mostra `N+` e hint “ativos nesta página” — **não** usa `appointmentsTotal` (que incluía cancelados).
+- **Dependência Backend:** patch `activeOnly` em `GET /api/appointments` (DTO + lifecycle) está no worktree para total server-side fiel; até merge, o client permanece honesto.
 
 ### Lint
 - `npm run lint -w @agenda-pro/web` — **OK (0 warnings / 0 errors)**
-
-### Follow-up CSRF (Agente 1 / `2ae0303`)
-- `lib/api.ts`: mutações `auth=true` (POST/PATCH/PUT/DELETE) enviam `X-CSRF-Token`.
-- Fonte do token: memória → `document.cookie` (`ap_csrf`) → `GET /api/auth/csrf` (`body.csrfToken`).
-- `tryRefresh` / logout cobertos; retry único em 403 CSRF; AuthProvider aquece token pós-`/me`.
-- Login/register usam `auth: false` (sem cookie de acesso → guard isento) e aquecem CSRF após sucesso.
 
 ---
 
 ## Breaking / avisos (coordenação)
 
 ### Breaking (comportamento UI)
-1. **Nav MEMBER filtrada:** itens CRM/owner some do menu. Deep-link em `/dashboard/clients` mostra empty state “Acesso restrito”. Depende de Agente 1 garantir `user.role` em `/auth/me` e filtro server-side de appointments.
-2. **Filtros de data:** ISO enviados à API passam a ser meia-noite/fim-do-dia **no TZ do tenant**. Ranges podem mudar ±1 dia vs browser em fusos distantes — esperado e desejado.
-3. **CSRF cookie-auth (Agente 1):** mutações autenticadas por cookie exigem header `X-CSRF-Token` == cookie `ap_csrf`. SPA cobre isso em `api()` central — **sem mudar cada página**. Escopo backend: refresh/logout, clients, appointments, team (+ o que o guard for aplicado).
+1. **StatCard “Próximos 7 dias”:** deixa de inflar com cancelados via `total` truncado. Com >100 itens no range, o valor vira `N+` (piso da página) em vez de um total bruto misturado.
+2. **Cancelar / remarcar (manage token):** UI passa de painel inline para **dialog modal**.
 
-### Avisos (não breaking de tipo)
-1. **`lib/types.ts` `User.role` permanece `string?`** — UI faz cast para `OWNER | MEMBER`. Se Agente 1 tipar formalmente `role: UserRole`, alinhar (melhoria, não exigido neste diff para evitar drift).
-2. **CRM clients:** UI pronta para MEMBER empty; se API ainda devolver 403, empty cobre; se devolver dados sem filtro, é gap de backend (Agente 1).
-3. **AuthProvider `requireAuth`:** um refresh de sessão no shell; `refresh()` em billing pode revalidar — não duplica probe por page mount.
-4. **Onboarding:** dismiss local; não sincroniza com backend. Wizard só para não-MEMBER.
-5. **StatCard 7 dias:** `total` da API ainda pode incluir cancelados se o backend não filtrar — aviso herdado.
-6. **CSRF cross-origin:** com `NEXT_PUBLIC_API_URL` em outro origin (ex.: `:3000`→`:3001`), `document.cookie` **não** lê `ap_csrf` do domínio da API. O cookie **não é HttpOnly** (OK para double-submit), mas o SPA depende de `GET /api/auth/csrf` + cache em memória. Same-origin (proxy) também funciona via cookie. **Sem blocker** enquanto `/auth/csrf` existir.
-7. **CSRF pós-refresh:** refresh rotaciona `ap_csrf`; `api()` limpa cache e reemite via `/auth/csrf` antes do retry.
-
-### Sem mudança de contrato tipado
-- Nenhum campo novo obrigatório em `AppointmentListResponse` / payloads de booking.
-- CSRF não exige mudança em `types.ts` (header + cookie opacos).
+### Avisos
+1. Total exato server-side de ativos requer merge do query param `activeOnly` (arquivos API no worktree).
+2. CSRF / AuthProvider / Graphite / SSR — **não reabertos**.
 
 ---
 
 ## Gaps restantes
 
-1. StarPicker teclado (UX P12)  
-2. Testes web (script ainda no-op)  
-3. Focus trap em overlays além de Modal/menu  
-4. `Field error=` em auth forms  
-5. Count server-side “ativos” para StatCard 7 dias  
+1. Testes web (script ainda no-op)
+2. Tipar `User.role` formalmente (Backend AuthZ)
+3. Merge `activeOnly` para total paginado fiel no StatCard
 
 ---
 
 ## Arquivos tocados (principais)
 
-- `apps/web/src/components/AuthProvider.tsx` **(novo)**
-- `apps/web/src/components/SlotListbox.tsx` **(novo)**
-- `apps/web/src/components/OnboardingWizard.tsx` **(novo)**
-- `apps/web/src/components/DashboardShell.tsx`
-- `apps/web/src/lib/format.ts`
-- `apps/web/src/lib/api.ts` *(CSRF double-submit)*
-- `apps/web/src/app/login/page.tsx` / `register/page.tsx` *(warm CSRF)*
-- `apps/web/src/app/dashboard/page.tsx`
-- `apps/web/src/app/dashboard/appointments/page.tsx`
-- `apps/web/src/app/dashboard/{clients,reports,reviews,billing,settings}/**`
-- `apps/web/src/app/u/[slug]/page.tsx` + `PublicBookingClient.tsx` **(novo)**
+- `apps/web/src/lib/useFocusTrap.ts` **(novo)**
+- `apps/web/src/lib/authFieldErrors.ts` **(novo)**
+- `apps/web/src/components/ui.tsx` / `DashboardShell.tsx`
 - `apps/web/src/app/agendamento/[token]/page.tsx`
-- Pages Graphite: services, team, waitlist, availability, termos, privacidade, planos, auth pages, `ui.tsx`, `pix.tsx`
+- `apps/web/src/app/{login,register,esqueci-senha,redefinir-senha}/page.tsx`
+- `apps/web/src/app/dashboard/page.tsx`
+- `apps/api/src/appointments/**` (`activeOnly` — patch mínimo, pending merge)
 - `SCORECARD_FRONTEND_UX.md` (este)

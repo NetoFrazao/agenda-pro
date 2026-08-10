@@ -172,7 +172,10 @@ export default function DashboardOverviewPage() {
     .filter((a) => a.status !== 'CANCELLED' && a.status !== 'NO_SHOW')
     .sort((a, b) => +new Date(a.startsAt) - +new Date(b.startsAt));
   const upcomingPreview = upcomingAll.slice(0, 6);
-  const upcomingWeekCount = appointmentsTruncated ? appointmentsTotal : upcomingAll.length;
+  // Contagem honesta só de ativos na página carregada. Se truncado, não usamos
+  // `appointmentsTotal` (inclui cancelados) — dependência Backend: query `activeOnly`.
+  const upcomingWeekCount = upcomingAll.length;
+  const upcomingWeekTruncated = appointmentsTruncated;
 
   const tz = timezone || me?.tenant?.timezone;
   const todayKey = todayYmdInTimeZone(tz);
@@ -233,13 +236,15 @@ export default function DashboardOverviewPage() {
         <StatCard accent label="Hoje" value={todayCount} hint="agendamentos ativos" />
         <StatCard
           label="Próximos 7 dias"
-          value={upcomingWeekCount}
+          value={upcomingWeekTruncated ? `${upcomingWeekCount}+` : upcomingWeekCount}
           hint={
             <Link
               href="/dashboard/appointments"
               className="font-medium text-mint-deep hover:underline"
             >
-              {appointmentsTruncated ? 'ver agenda' : 'Abrir agenda'}
+              {upcomingWeekTruncated
+                ? 'ativos nesta página · ver agenda'
+                : 'ativos · abrir agenda'}
             </Link>
           }
         />

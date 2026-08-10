@@ -6,6 +6,9 @@ import { FormEvent, Suspense, useState } from 'react';
 import { AuthShell } from '@/components/AuthShell';
 import { Alert, Button, Field, Input, Spinner } from '@/components/ui';
 import { api, ApiError } from '@/lib/api';
+import { mapAuthApiFieldErrors, type AuthFieldErrors } from '@/lib/authFieldErrors';
+
+const RESET_FIELDS = ['password', 'confirm'] as const;
 
 function ResetPasswordForm() {
   const searchParams = useSearchParams();
@@ -15,19 +18,22 @@ function ResetPasswordForm() {
   const [confirm, setConfirm] = useState('');
   const [done, setDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<AuthFieldErrors>({});
   const [loading, setLoading] = useState(false);
+
+  function validateClient(): boolean {
+    const next: AuthFieldErrors = {};
+    if (password.length < 8) next.password = 'A senha deve ter no mínimo 8 caracteres.';
+    if (!confirm) next.confirm = 'Confirme a nova senha.';
+    else if (password !== confirm) next.confirm = 'As senhas não coincidem.';
+    setFieldErrors(next);
+    return Object.keys(next).length === 0;
+  }
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
-    if (password.length < 8) {
-      setError('A senha deve ter no mínimo 8 caracteres.');
-      return;
-    }
-    if (password !== confirm) {
-      setError('As senhas não coincidem.');
-      return;
-    }
+    if (!validateClient()) return;
     setLoading(true);
     try {
       await api('/api/auth/reset-password', {
@@ -38,9 +44,20 @@ function ResetPasswordForm() {
       setDone(true);
     } catch (err) {
       if (err instanceof ApiError && err.status === 400) {
-        setError('Token inválido ou expirado.');
+        const mapped = mapAuthApiFieldErrors(err, RESET_FIELDS);
+        if (Object.keys(mapped).length > 0) {
+          setFieldErrors(mapped);
+          setError(null);
+        } else {
+          setFieldErrors({});
+          setError('Token inválido ou expirado.');
+        }
+      } else if (err instanceof ApiError) {
+        setFieldErrors({});
+        setError(err.message || 'Não foi possível redefinir a senha.');
       } else {
-        setError(err instanceof ApiError ? err.message : 'Não foi possível redefinir a senha.');
+        setFieldErrors({});
+        setError('Não foi possível redefinir a senha.');
       }
     } finally {
       setLoading(false);
@@ -75,7 +92,12 @@ function ResetPasswordForm() {
   return (
     <form onSubmit={onSubmit} className="space-y-4" noValidate>
       {error ? <Alert>{error}</Alert> : null}
-      <Field label="Nova senha" id="password" hint="Mínimo de 8 caracteres.">
+      <Field
+        label="Nova senha"
+        id="password"
+        hint="Mínimo de 8 caracteres."
+        error={fieldErrors.password}
+      >
         <Input
           id="password"
           name="password"
@@ -84,10 +106,13 @@ function ResetPasswordForm() {
           required
           minLength={8}
           value={password}
-          onChange={(e) => setPassword(e.target.value)}
+          onChange={(e) => {
+            setPassword(e.target.value);
+            if (fieldErrors.password) setFieldErrors((f) => ({ ...f, password: '' }));
+          }}
         />
       </Field>
-      <Field label="Confirmar nova senha" id="confirm">
+      <Field label="Confirmar nova senha" id="confirm" error={fieldErrors.confirm}>
         <Input
           id="confirm"
           name="confirm"
@@ -96,7 +121,10 @@ function ResetPasswordForm() {
           required
           minLength={8}
           value={confirm}
-          onChange={(e) => setConfirm(e.target.value)}
+          onChange={(e) => {
+            setConfirm(e.target.value);
+            if (fieldErrors.confirm) setFieldErrors((f) => ({ ...f, confirm: '' }));
+          }}
         />
       </Field>
       <Button type="submit" fullWidth disabled={loading}>
