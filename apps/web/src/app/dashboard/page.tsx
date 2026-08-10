@@ -129,7 +129,7 @@ export default function DashboardOverviewPage() {
         const [servicesData, appointmentsData, summaryData, rules] = await Promise.all([
           api<Service[]>('/api/services').catch(() => [] as Service[]),
           api<AppointmentListResponse>(
-            `/api/appointments?from=${encodeURIComponent(fromIso)}&to=${encodeURIComponent(toIso)}&page=1&pageSize=100`,
+            `/api/appointments?from=${encodeURIComponent(fromIso)}&to=${encodeURIComponent(toIso)}&page=1&pageSize=100&activeOnly=true`,
           ),
           isMember
             ? Promise.resolve(null)
@@ -172,10 +172,8 @@ export default function DashboardOverviewPage() {
     .filter((a) => a.status !== 'CANCELLED' && a.status !== 'NO_SHOW')
     .sort((a, b) => +new Date(a.startsAt) - +new Date(b.startsAt));
   const upcomingPreview = upcomingAll.slice(0, 6);
-  // Contagem honesta só de ativos na página carregada. Se truncado, não usamos
-  // `appointmentsTotal` (inclui cancelados) — dependência Backend: query `activeOnly`.
-  const upcomingWeekCount = upcomingAll.length;
-  const upcomingWeekTruncated = appointmentsTruncated;
+  // Com activeOnly=true, `total` da API já exclui CANCELLED/NO_SHOW (mesmo critério do filtro local).
+  const upcomingWeekCount = appointmentsTruncated ? appointmentsTotal : upcomingAll.length;
 
   const tz = timezone || me?.tenant?.timezone;
   const todayKey = todayYmdInTimeZone(tz);
@@ -236,15 +234,13 @@ export default function DashboardOverviewPage() {
         <StatCard accent label="Hoje" value={todayCount} hint="agendamentos ativos" />
         <StatCard
           label="Próximos 7 dias"
-          value={upcomingWeekTruncated ? `${upcomingWeekCount}+` : upcomingWeekCount}
+          value={upcomingWeekCount}
           hint={
             <Link
               href="/dashboard/appointments"
               className="font-medium text-mint-deep hover:underline"
             >
-              {upcomingWeekTruncated
-                ? 'ativos nesta página · ver agenda'
-                : 'ativos · abrir agenda'}
+              {appointmentsTruncated ? 'ver agenda (ativos)' : 'ativos · abrir agenda'}
             </Link>
           }
         />
