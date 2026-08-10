@@ -127,3 +127,10 @@ npm run test:e2e -w @agenda-pro/api -- --testPathPattern="booking.e2e-spec|payme
 2. Isolar throttle Redis entre specs Nest e2e (ou `FLUSHDB` de chaves de rate-limit entre suites).
 3. Opcional: alinhar `outDir`/rootDir do Nest para `dist/main.js` novamente.
 4. Opcional: mock BullMQ global no Jest setup para acabar com `--forceExit`.
+
+---
+
+## Follow-up pós-merge (base `cursor/saas-hardening-crm-infra`)
+
+**Fora do escopo QA R4:** o mojibake UTF-8 em `apps/web/src/app/u/[slug]/PublicBookingClient.tsx` foi corrigido em commit separado na base (`fix(web): repair UTF-8 mojibake in public booking`). Labels UI (`Serviço`, `horário`, etc.) reescritas em UTF-8 válido. Revalidar `smoke-booking` live quando a stack estiver de pé.
+
