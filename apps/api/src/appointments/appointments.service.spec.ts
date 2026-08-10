@@ -286,6 +286,28 @@ describe('AppointmentsService — orquestração notifications / FSM', () => {
     );
   });
 
+  it('list activeOnly exclui CANCELLED e NO_SHOW no where', async () => {
+    const findMany = jest.fn().mockResolvedValue([]);
+    const count = jest.fn().mockResolvedValue(0);
+    const { notifications, cache, loyalty } = baseDeps();
+    const { service } = createAppointmentsTestFacade({
+      prisma: { appointment: { findMany, count } },
+      notifications,
+      loyalty,
+      cache,
+    });
+
+    await service.list('t1', { activeOnly: true, page: 1, pageSize: 50 });
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          tenantId: 't1',
+          status: { notIn: [AppointmentStatus.CANCELLED, AppointmentStatus.NO_SHOW] },
+        },
+      }),
+    );
+  });
+
   it('confirmByToken é no-op idempotente se já CONFIRMED', async () => {
     const raw = generateManageToken();
     const update = jest.fn();

@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { AppointmentStatus } from '@prisma/client';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   IsBoolean,
   IsEmail,
@@ -37,6 +37,15 @@ export class ListAppointmentsQueryDto {
   @IsOptional()
   @IsString()
   professionalId?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Se true, exclui CANCELLED e NO_SHOW de items e total (contagem de agendamentos ativos).',
+  })
+  @IsOptional()
+  @Transform(({ value }) => value === true || value === 'true' || value === '1')
+  @IsBoolean()
+  activeOnly?: boolean;
 
   @ApiPropertyOptional({ default: 1 })
   @IsOptional()
