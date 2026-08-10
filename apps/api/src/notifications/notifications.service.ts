@@ -106,9 +106,12 @@ export class NotificationsService implements OnModuleDestroy {
 
     const when = this.formatWhen(appointment);
     const manageUrl = this.resolveManageUrl(appointment.manageToken, rawManageToken);
+    const location = `${appointment.tenant.name}${
+      appointment.tenant.address ? ` — ${appointment.tenant.address}` : ''
+    }`;
     const manageLines = manageUrl
-      ? ['', `Para confirmar presença, remarcar ou cancelar, use seu link exclusivo:`, manageUrl]
-      : ['', `Para remarcar ou cancelar, use o link exclusivo que você recebeu ao agendar.`];
+      ? ['', 'Precisa confirmar presença, remarcar ou cancelar? Use seu link exclusivo:', manageUrl]
+      : ['', 'Precisa remarcar ou cancelar? Use o link exclusivo que você recebeu ao agendar.'];
 
     await this.createAndEnqueue({
       tenantId: appointment.tenantId,
@@ -117,13 +120,15 @@ export class NotificationsService implements OnModuleDestroy {
       channel: NotificationChannel.EMAIL,
       payload: {
         to: appointment.client.email,
-        subject: `Agendamento confirmado — ${appointment.tenant.name}`,
+        subject: `${appointment.service.name} confirmado · ${when}`,
         text: [
           `Olá ${appointment.client.name}!`,
           '',
-          `Seu horário está garantido: ${appointment.service.name} em ${when}.`,
-          `Local: ${appointment.tenant.name}${appointment.tenant.address ? ` — ${appointment.tenant.address}` : ''}`,
+          `Que bom te receber — seu agendamento de ${appointment.service.name} está confirmado para ${when}.`,
+          `Local: ${location}`,
           ...manageLines,
+          '',
+          `Até lá! Equipe ${appointment.tenant.name}`,
         ].join('\n'),
         appointmentId: appointment.id,
       },
@@ -135,12 +140,18 @@ export class NotificationsService implements OnModuleDestroy {
       const delayMs = scheduledFor.getTime() - Date.now();
       if (delayMs <= 0) continue;
 
-      const reminderText =
-        `Olá ${appointment.client.name}! Lembrete do seu horário em ${appointment.tenant.name}: ` +
-        `${appointment.service.name} em ${when}. ` +
-        (manageUrl
-          ? `Confirme ou remarque aqui: ${manageUrl}`
-          : `Use o link exclusivo que você recebeu ao agendar para confirmar ou remarcar.`);
+      const timingLabel = hoursBefore === 24 ? 'amanhã' : 'daqui a 2 horas';
+      const manageCta = manageUrl
+        ? `Confirme presença ou remarque neste link: ${manageUrl}`
+        : `Use o link exclusivo que você recebeu ao agendar para confirmar presença ou remarcar.`;
+      const reminderText = [
+        `Olá ${appointment.client.name}!`,
+        '',
+        `Passando para lembrar: seu agendamento de ${appointment.service.name} em ${appointment.tenant.name} é ${timingLabel} (${when}).`,
+        `Estamos te esperando.`,
+        '',
+        manageCta,
+      ].join('\n');
 
       if (planAllowsWhatsappReminders(appointment.tenant.plan)) {
         await this.createAndEnqueue(
@@ -172,7 +183,10 @@ export class NotificationsService implements OnModuleDestroy {
             scheduledFor,
             payload: {
               to: appointment.client.email,
-              subject: `Lembrete: ${appointment.service.name} em ${when} — ${appointment.tenant.name}`,
+              subject:
+                hoursBefore === 24
+                  ? `Amanhã: ${appointment.service.name} em ${appointment.tenant.name}`
+                  : `Daqui a 2h: ${appointment.service.name} te espera`,
               text: reminderText,
               appointmentId: appointment.id,
               startsAtIso: appointment.startsAt.toISOString(),
@@ -197,6 +211,11 @@ export class NotificationsService implements OnModuleDestroy {
     const bookingUrl = `${this.env.appPublicUrl}/u/${appointment.tenant.slug}`;
 
     if (appointment.client.email) {
+      const intro =
+        cancelledBy === 'professional'
+          ? `Seu agendamento de ${appointment.service.name} em ${when} foi cancelado por ${appointment.tenant.name}.`
+          : `Confirmamos o cancelamento do seu agendamento de ${appointment.service.name} em ${when}.`;
+
       await this.createAndEnqueue({
         tenantId: appointment.tenantId,
         appointmentId: appointment.id,
@@ -204,11 +223,17 @@ export class NotificationsService implements OnModuleDestroy {
         channel: NotificationChannel.EMAIL,
         payload: {
           to: appointment.client.email,
-          subject: `Agendamento cancelado — ${appointment.tenant.name}`,
-          text:
-            cancelledBy === 'professional'
-              ? `Olá ${appointment.client.name}, seu horário de ${appointment.service.name} em ${when} foi cancelado por ${appointment.tenant.name}. Reagende quando quiser: ${bookingUrl}`
-              : `Olá ${appointment.client.name}, confirmamos o cancelamento do seu horário de ${appointment.service.name} em ${when}. Reagende quando quiser: ${bookingUrl}`,
+          subject: `Agendamento de ${appointment.service.name} cancelado`,
+          text: [
+            `Olá ${appointment.client.name},`,
+            '',
+            intro,
+            '',
+            'Próximo passo: escolha um novo horário quando quiser em:',
+            bookingUrl,
+            '',
+            `Se precisar de ajuda, fale com ${appointment.tenant.name}.`,
+          ].join('\n'),
           appointmentId: appointment.id,
         },
       });
@@ -245,9 +270,14 @@ export class NotificationsService implements OnModuleDestroy {
     clientEmail: string | null;
   }) {
     const bookingUrl = `${this.env.appPublicUrl}/u/${input.tenantSlug}`;
-    const message =
-      `Olá ${input.clientName}! Abriu um horário em ${input.tenantName} no dia que você queria (${input.dateKey}). ` +
-      `Corre para garantir: ${bookingUrl}`;
+    const message = [
+      `Olá ${input.clientName}!`,
+      '',
+      `Boa notícia: abriu uma vaga para agendamento em ${input.tenantName} no dia que você queria (${input.dateKey}).`,
+      '',
+      `Próximo passo: garanta o seu agora em:`,
+      bookingUrl,
+    ].join('\n');
 
     const tenant = await this.prisma.tenant.findUnique({
       where: { id: input.tenantId },
@@ -273,7 +303,7 @@ export class NotificationsService implements OnModuleDestroy {
         channel: NotificationChannel.EMAIL,
         payload: {
           to: input.clientEmail,
-          subject: `Vaga aberta em ${input.tenantName}!`,
+          subject: `Abriu vaga no dia que você pediu · ${input.tenantName}`,
           text: message,
         },
       });

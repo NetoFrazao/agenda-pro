@@ -108,11 +108,31 @@ describe('NotificationsService — enqueue orchestration', () => {
     // 1 confirmação + 2 lembretes e-mail (24h/2h) + 2 WhatsApp = 5
     expect(create).toHaveBeenCalledTimes(5);
 
-    const confirmationPayload = create.mock.calls.find(
+    const confirmation = create.mock.calls.find(
       (c: [{ data: { type: string } }]) =>
         c[0].data.type === NotificationJobType.BOOKING_CONFIRMATION,
-    )?.[0].data.payload as { text: string };
-    expect(confirmationPayload.text).toContain(`/agendamento/${raw}`);
+    )?.[0].data.payload as { subject: string; text: string };
+    expect(confirmation.subject).toMatch(/^Corte confirmado · /);
+    expect(confirmation.text).toContain(`/agendamento/${raw}`);
+    expect(confirmation.text).toContain('seu agendamento de Corte');
+    expect(confirmation.text).not.toMatch(/seu horário/i);
+
+    const reminderEmails = create.mock.calls.filter(
+      (c: [{ data: { type: string; channel: string } }]) =>
+        c[0].data.type === NotificationJobType.BOOKING_REMINDER &&
+        c[0].data.channel === NotificationChannel.EMAIL,
+    );
+    const reminderSubjects = reminderEmails.map(
+      (c: [{ data: { payload: { subject: string } } }]) => c[0].data.payload.subject,
+    );
+    expect(reminderSubjects).toEqual(
+      expect.arrayContaining(['Amanhã: Corte em Barbearia', 'Daqui a 2h: Corte te espera']),
+    );
+    for (const call of reminderEmails) {
+      const text = (call[0].data.payload as { text: string }).text;
+      expect(text).toContain('seu agendamento de Corte');
+      expect(text).not.toMatch(/seu horário/i);
+    }
 
     await service.onModuleDestroy();
   });
@@ -178,10 +198,17 @@ describe('NotificationsService — enqueue orchestration', () => {
         channel: NotificationChannel.EMAIL,
         payload: expect.objectContaining({
           to: 'ana@example.com',
-          text: expect.stringContaining('foi cancelado por Barbearia'),
+          subject: 'Agendamento de Corte cancelado',
+          text: expect.stringMatching(
+            /foi cancelado por Barbearia[\s\S]*Próximo passo: escolha um novo horário/,
+          ),
         }),
       }),
     });
+    const cancelText = (create.mock.calls[0][0].data.payload as { text: string }).text;
+    expect(cancelText).toContain('http://localhost:3000/u/barber');
+    expect(cancelText).toMatch(/agendamento de Corte/);
+    expect(cancelText).not.toMatch(/seu horário/i);
     await service.onModuleDestroy();
   });
 
@@ -231,6 +258,12 @@ describe('NotificationsService — enqueue orchestration', () => {
     expect(channels).toEqual(
       expect.arrayContaining([NotificationChannel.WHATSAPP, NotificationChannel.EMAIL]),
     );
+    const emailPayload = create.mock.calls.find(
+      (c: [{ data: { channel: string } }]) => c[0].data.channel === NotificationChannel.EMAIL,
+    )?.[0].data.payload as { subject: string; text: string };
+    expect(emailPayload.subject).toBe('Abriu vaga no dia que você pediu · Barbearia');
+    expect(emailPayload.text).toContain('vaga para agendamento');
+    expect(emailPayload.text).toContain('Próximo passo:');
     await service.onModuleDestroy();
   });
 
