@@ -31,10 +31,14 @@ test.describe('Smoke — criar agendamento público', () => {
       await dateInput.fill(ymd);
     }
 
-    const slotGroup = page.getByRole('group', { name: /Horários disponíveis/i });
-    const slotBtn = slotGroup.getByRole('button').first();
-    await expect(slotBtn).toBeVisible({ timeout: 20_000 });
-    await slotBtn.click();
+    const verHorarios = page.getByRole('button', { name: /Ver horários/i });
+    if (await verHorarios.isVisible({ timeout: 5_000 }).catch(() => false)) {
+      await verHorarios.click();
+    }
+
+    const slotOption = page.getByRole('listbox', { name: /Horários disponíveis/i }).getByRole('option').first();
+    await expect(slotOption).toBeVisible({ timeout: 20_000 });
+    await slotOption.click();
 
     const continuar = page.getByRole('button', { name: /Continuar/i });
     if (await continuar.isVisible().catch(() => false)) {
