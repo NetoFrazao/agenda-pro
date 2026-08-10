@@ -6,6 +6,7 @@ import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 
 import { useFocusTrap } from '@/lib/useFocusTrap';
 import { AuthProvider, useAuth } from './AuthProvider';
 import { BrandLogo } from './BrandLogo';
+import { LogOut, Menu, X } from './icons';
 import { Button } from './ui';
 
 const NAV_ALL = [
@@ -86,12 +87,17 @@ function DashboardChrome({ children }: { children: ReactNode }) {
             <button
               ref={menuButtonRef}
               type="button"
-              className="touch-target inline-flex items-center justify-center rounded-xl px-3 text-sm font-medium text-ink-muted ring-1 ring-line md:hidden"
+              className="touch-target inline-flex items-center justify-center gap-2 rounded-xl px-3 text-sm font-medium text-ink-muted ring-1 ring-line md:hidden"
               aria-expanded={menuOpen}
               aria-controls={navId}
               onClick={() => setMenuOpen((v) => !v)}
             >
-              {menuOpen ? 'Fechar' : 'Menu'}
+              {menuOpen ? (
+                <X className="size-5" aria-hidden strokeWidth={2} />
+              ) : (
+                <Menu className="size-5" aria-hidden strokeWidth={2} />
+              )}
+              <span>{menuOpen ? 'Fechar' : 'Menu'}</span>
             </button>
           </div>
           <nav
@@ -126,6 +132,7 @@ function DashboardChrome({ children }: { children: ReactNode }) {
                 onClick={handleLogout}
                 className="justify-start text-muted"
               >
+                {!loggingOut ? <LogOut className="size-4" aria-hidden strokeWidth={2} /> : null}
                 {loggingOut ? 'Saindo…' : 'Sair'}
               </Button>
             </div>

@@ -3,6 +3,7 @@
 import Image from 'next/image';
 import { useState } from 'react';
 import { formatBRL, formatDateTime } from '@/lib/format';
+import { Copy } from './icons';
 import { Button } from './ui';
 
 export function CopyButton({ value, label = 'Copiar' }: { value: string; label?: string }) {
@@ -20,7 +21,14 @@ export function CopyButton({ value, label = 'Copiar' }: { value: string; label?:
 
   return (
     <Button type="button" variant="secondary" onClick={() => void copy()} aria-live="polite">
-      {copied ? 'Copiado!' : label}
+      {copied ? (
+        <>Copiado!</>
+      ) : (
+        <>
+          <Copy className="size-4" aria-hidden strokeWidth={2} />
+          {label}
+        </>
+      )}
     </Button>
   );
 }
@@ -46,12 +54,12 @@ export function PixBlock({
   return (
     <section
       aria-label="Pagamento do sinal via PIX"
-      className="rounded-lg border border-amber-200 bg-amber-50 p-5"
+      className="rounded-2xl border border-warning-border bg-warning-bg p-5"
     >
-      <h2 className="font-display text-lg font-semibold text-amber-950">
+      <h2 className="type-display-sm text-warning-fg">
         Sinal via PIX — {formatBRL(amountCents)}
       </h2>
-      {note ? <p className="mt-1 text-sm text-amber-900/90">{note}</p> : null}
+      {note ? <p className="mt-1 text-sm text-warning-fg/90">{note}</p> : null}
 
       <div className="mt-4 flex flex-col items-start gap-4 sm:flex-row">
         {qrCodeBase64 ? (
@@ -61,12 +69,12 @@ export function PixBlock({
             width={176}
             height={176}
             unoptimized
-            className="size-44 rounded-md bg-white p-2 ring-1 ring-amber-200"
+            className="size-44 rounded-md bg-white p-2 ring-1 ring-warning-border"
           />
         ) : null}
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-medium text-amber-950">PIX copia-e-cola</p>
-          <p className="mt-1 max-h-24 overflow-y-auto break-all rounded-md bg-white p-2 font-mono text-xs text-ink-muted ring-1 ring-amber-200">
+          <p className="text-sm font-medium text-warning-fg">PIX copia-e-cola</p>
+          <p className="mt-1 max-h-24 overflow-y-auto break-all rounded-md bg-white p-2 font-mono text-xs text-ink-muted ring-1 ring-warning-border">
             {copyPaste}
           </p>
           <div className="mt-3">
@@ -76,7 +84,7 @@ export function PixBlock({
       </div>
 
       {expiresAt ? (
-        <p className="mt-4 text-sm font-medium text-amber-900">
+        <p className="mt-4 text-sm font-medium text-warning-fg">
           Atenção: este PIX expira em {formatDateTime(expiresAt, timezone)}.
         </p>
       ) : null}

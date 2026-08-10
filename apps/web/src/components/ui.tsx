@@ -14,6 +14,7 @@ import {
 } from 'react';
 import { APPOINTMENT_STATUS_LABEL, APPOINTMENT_STATUS_TONE, type BadgeTone } from '@/lib/format';
 import { useFocusTrap } from '@/lib/useFocusTrap';
+import { AlertCircle, CheckCircle2, Info, Loader2, Star, X } from './icons';
 
 type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: 'primary' | 'secondary' | 'danger' | 'ghost' | 'dark';
@@ -24,10 +25,10 @@ type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
 
 const buttonVariants: Record<NonNullable<ButtonProps['variant']>, string> = {
   primary:
-    'bg-mint-deep text-white shadow-[0_10px_24px_-14px_rgba(15,118,110,0.9)] hover:bg-[#0b5f58] disabled:bg-mint-deep/45',
+    'bg-mint-deep text-white shadow-[var(--shadow-primary)] hover:bg-mint-hover disabled:bg-mint-deep/45',
   secondary:
     'bg-white/90 text-ink border border-line hover:bg-white disabled:text-muted-soft',
-  danger: 'bg-danger text-white hover:bg-red-800 disabled:bg-danger/50',
+  danger: 'bg-danger text-white hover:bg-danger-hover disabled:bg-danger/50',
   ghost: 'bg-transparent text-ink-muted hover:bg-black/[0.04] disabled:text-muted-soft',
   dark: 'bg-ink text-white hover:bg-ink-soft disabled:bg-ink/50',
 };
@@ -57,12 +58,7 @@ export function Button({
       className={`inline-flex items-center justify-center gap-2 font-semibold tracking-tight transition duration-150 disabled:cursor-not-allowed ${buttonVariants[variant]} ${buttonSizes[size]} ${fullWidth ? 'w-full' : ''} ${className}`}
       {...props}
     >
-      {loading ? (
-        <span
-          className="inline-block size-3.5 shrink-0 animate-spin rounded-full border-2 border-current border-t-transparent opacity-80"
-          aria-hidden
-        />
-      ) : null}
+      {loading ? <Loader2 className="size-3.5 shrink-0 animate-spin opacity-80" aria-hidden /> : null}
       {children}
     </button>
   );
@@ -107,7 +103,7 @@ export function Field({ label, id, hint, error, children }: FieldProps) {
 }
 
 const controlClass =
-  'w-full min-h-11 rounded-xl border border-line bg-white px-3.5 py-2.5 text-sm text-ink placeholder:text-muted-soft shadow-[inset_0_1px_0_rgba(255,255,255,0.7)] transition focus-visible:border-mint-deep focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-mint-deep/40 disabled:bg-paper-2';
+  'w-full min-h-11 rounded-xl border border-line bg-white px-3.5 py-2.5 text-sm text-ink placeholder:text-muted-soft shadow-[var(--shadow-inset-control)] transition focus-visible:border-mint-deep focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-mint-deep/40 disabled:bg-paper-2';
 
 export function Input({ className = '', id, ...props }: InputHTMLAttributes<HTMLInputElement>) {
   return <input id={id} className={`${controlClass} ${className}`} {...props} />;
@@ -142,16 +138,27 @@ export function Alert({
   tone?: 'error' | 'success' | 'info';
 }) {
   const tones = {
-    error: 'border-danger-border bg-danger-bg text-red-900',
-    success: 'border-success-border bg-success-bg text-mint-deep',
-    info: 'border-line bg-white/70 text-ink-muted',
+    error: {
+      className: 'border-danger-border bg-danger-bg text-danger-fg',
+      Icon: AlertCircle,
+    },
+    success: {
+      className: 'border-success-border bg-success-bg text-success-fg',
+      Icon: CheckCircle2,
+    },
+    info: {
+      className: 'border-line bg-white/70 text-ink-muted',
+      Icon: Info,
+    },
   };
+  const { className, Icon } = tones[tone];
   return (
     <div
       role="alert"
-      className={`rounded-xl border px-3.5 py-2.5 text-sm leading-relaxed ${tones[tone]}`}
+      className={`flex gap-2.5 rounded-xl border px-3.5 py-2.5 text-sm leading-relaxed ${className}`}
     >
-      {children}
+      <Icon className="mt-0.5 size-4 shrink-0" aria-hidden strokeWidth={2} />
+      <div className="min-w-0 flex-1">{children}</div>
     </div>
   );
 }
@@ -168,11 +175,9 @@ export function PageTitle({
   return (
     <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
       <div>
-        <h1 className="font-display text-3xl font-semibold tracking-tight text-ink sm:text-[2rem]">
-          {title}
-        </h1>
+        <h1 className="type-display-lg text-ink sm:text-[2rem]">{title}</h1>
         {description ? (
-          <p className="mt-2 max-w-2xl text-[15px] leading-relaxed text-muted">{description}</p>
+          <p className="type-body-lg mt-2 max-w-2xl text-muted">{description}</p>
         ) : null}
       </div>
       {action ? <div className="shrink-0">{action}</div> : null}
@@ -190,12 +195,10 @@ export function EmptyState({
   action?: ReactNode;
 }) {
   return (
-    <div className="rounded-2xl border border-dashed border-[#c9d0cb] bg-white/50 px-6 py-12 text-center">
-      {title ? (
-        <p className="font-display text-base font-semibold text-ink">{title}</p>
-      ) : null}
+    <div className="rounded-2xl border border-dashed border-line-soft bg-white/50 px-6 py-12 text-center">
+      {title ? <p className="type-display-sm text-ink">{title}</p> : null}
       <div
-        className={`text-sm leading-relaxed text-muted ${title ? 'mt-2' : ''} ${action ? 'mb-5' : ''}`}
+        className={`type-body-sm text-muted ${title ? 'mt-2' : ''} ${action ? 'mb-5' : ''}`}
       >
         {children}
       </div>
@@ -207,21 +210,63 @@ export function EmptyState({
 export function Spinner({ label = 'Carregando…' }: { label?: string }) {
   return (
     <div className="flex items-center gap-3 text-sm text-muted" role="status">
-      <span
-        className="inline-block size-4 animate-spin rounded-full border-2 border-line border-t-mint-deep"
-        aria-hidden
-      />
+      <Loader2 className="size-4 animate-spin text-mint-deep" aria-hidden />
       <span>{label}</span>
     </div>
   );
 }
 
+/** Bloco base de skeleton — use com className de tamanho. */
 export function Skeleton({ className = '' }: { className?: string }) {
   return (
+    <div className={`animate-skeleton rounded-xl bg-paper-2 ${className}`} aria-hidden />
+  );
+}
+
+/** Skeleton de card (StatCard / surface). */
+export function SkeletonCard({ className = '' }: { className?: string }) {
+  return (
     <div
-      className={`animate-skeleton rounded-xl bg-paper-2 ${className}`}
-      aria-hidden
-    />
+      className={`surface-elevated space-y-3 rounded-2xl p-5 ${className}`}
+      role="status"
+      aria-label="Carregando card"
+    >
+      <Skeleton className="h-3 w-24" />
+      <Skeleton className="h-8 w-20" />
+      <Skeleton className="h-3 w-32 max-w-full" />
+      <span className="sr-only">Carregando…</span>
+    </div>
+  );
+}
+
+/** Skeleton de lista (linhas em surface). */
+export function SkeletonList({
+  rows = 4,
+  className = '',
+}: {
+  rows?: number;
+  className?: string;
+}) {
+  return (
+    <div
+      className={`surface-elevated overflow-hidden rounded-2xl ${className}`}
+      role="status"
+      aria-label="Carregando lista"
+    >
+      {Array.from({ length: rows }).map((_, i) => (
+        <div
+          key={i}
+          className="flex items-center justify-between gap-4 border-b border-paper-2 px-5 py-4 last:border-0"
+        >
+          <div className="flex-1 space-y-2">
+            <Skeleton className="h-4 w-36" />
+            <Skeleton className="h-3 w-52 max-w-full" />
+          </div>
+          <Skeleton className="h-4 w-24" />
+        </div>
+      ))}
+      <span className="sr-only">Carregando…</span>
+    </div>
   );
 }
 
@@ -240,25 +285,12 @@ export function PageSkeleton({
       </div>
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {Array.from({ length: cards }).map((_, i) => (
-          <Skeleton key={i} className="h-28 rounded-2xl" />
+          <SkeletonCard key={i} />
         ))}
       </div>
       <div className="space-y-3">
         <Skeleton className="h-6 w-40" />
-        <div className="surface-elevated overflow-hidden rounded-2xl">
-          {Array.from({ length: rows }).map((_, i) => (
-            <div
-              key={i}
-              className="flex items-center justify-between gap-4 border-b border-paper-2 px-5 py-4 last:border-0"
-            >
-              <div className="flex-1 space-y-2">
-                <Skeleton className="h-4 w-36" />
-                <Skeleton className="h-3 w-52 max-w-full" />
-              </div>
-              <Skeleton className="h-4 w-24" />
-            </div>
-          ))}
-        </div>
+        <SkeletonList rows={rows} />
       </div>
       <span className="sr-only">Carregando…</span>
     </div>
@@ -266,11 +298,11 @@ export function PageSkeleton({
 }
 
 const badgeTones: Record<BadgeTone, string> = {
-  emerald: 'bg-success-bg text-mint-deep',
-  sky: 'bg-sky-100 text-sky-950',
-  amber: 'bg-amber-100 text-amber-950',
-  red: 'bg-red-100 text-red-950',
-  orange: 'bg-orange-100 text-orange-950',
+  emerald: 'bg-success-bg text-success-fg',
+  sky: 'bg-info-bg text-info-fg',
+  amber: 'bg-warning-bg text-warning-fg',
+  red: 'bg-danger-bg text-danger-fg',
+  orange: 'bg-warning-bg text-warning-fg',
   stone: 'bg-paper-2 text-ink-muted',
 };
 
@@ -294,16 +326,21 @@ export function StatusBadge({ status }: { status: string }) {
 
 export function Stars({ value, size = 'sm' }: { value: number; size?: 'sm' | 'lg' }) {
   const rounded = Math.round(value);
+  const iconClass = size === 'lg' ? 'size-5' : 'size-3.5';
   return (
     <span
-      className={`inline-flex gap-0.5 text-amber-500 ${size === 'lg' ? 'text-xl' : 'text-sm'}`}
+      className="inline-flex gap-0.5 text-brass"
       role="img"
       aria-label={`${value.toLocaleString('pt-BR')} de 5 estrelas`}
     >
       {[1, 2, 3, 4, 5].map((n) => (
-        <span key={n} aria-hidden>
-          {n <= rounded ? '★' : '☆'}
-        </span>
+        <Star
+          key={n}
+          className={iconClass}
+          aria-hidden
+          fill={n <= rounded ? 'currentColor' : 'none'}
+          strokeWidth={1.75}
+        />
       ))}
     </span>
   );
@@ -340,16 +377,16 @@ export function Modal({
         className="relative max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl bg-white p-6 shadow-[var(--shadow-modal)] outline-none"
       >
         <div className="flex items-start justify-between gap-4">
-          <h2 id={titleId} className="font-display text-lg font-semibold text-ink">
+          <h2 id={titleId} className="type-display-sm text-ink">
             {title}
           </h2>
           <button
             type="button"
             onClick={onClose}
             aria-label="Fechar"
-            className="touch-target inline-flex items-center justify-center rounded-lg text-lg leading-none text-muted hover:bg-paper hover:text-ink"
+            className="touch-target inline-flex items-center justify-center rounded-lg text-muted hover:bg-paper hover:text-ink"
           >
-            ×
+            <X className="size-5" aria-hidden strokeWidth={2} />
           </button>
         </div>
         <div className="mt-4">{children}</div>
@@ -371,14 +408,8 @@ export function StatCard({
 }) {
   return (
     <div className={`rounded-2xl p-5 ${accent ? 'bg-ink text-white' : 'surface-elevated'}`}>
-      <p
-        className={`text-xs font-semibold uppercase tracking-[0.14em] ${accent ? 'text-white/70' : 'text-muted'}`}
-      >
-        {label}
-      </p>
-      <div
-        className={`mt-3 font-display text-3xl font-semibold tracking-tight ${accent ? 'text-white' : 'text-ink'}`}
-      >
+      <p className={`type-overline ${accent ? 'text-white/70' : 'text-muted'}`}>{label}</p>
+      <div className={`mt-3 type-display-lg tracking-tight ${accent ? 'text-white' : 'text-ink'}`}>
         {value}
       </div>
       {hint ? (
@@ -387,3 +418,7 @@ export function StatCard({
     </div>
   );
 }
+
+/* Re-exports claros para Agentes 2–3 */
+export { Toast, ToastProvider, useToast } from './Toast';
+export type { ToastItem, ToastTone } from './Toast';
