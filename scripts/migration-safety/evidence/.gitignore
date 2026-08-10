@@ -1,0 +1,4 @@
+# Evidence artifacts (clone migrate rehearsal)
+# Keep small machine-readable results; ignore bulky dumps.
+source-dump-*.sql
+*.log

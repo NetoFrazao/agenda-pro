@@ -1,0 +1,15 @@
+Prisma schema loaded from apps\api\prisma\schema.prisma
+Datasource "db": PostgreSQL database "agenda_pro_mig_safety_r4", schema "public" at "localhost:5432"
+
+Migration 20260810010000_architecture_integrity marked as rolled back.
+┌─────────────────────────────────────────────────────────┐
+│  Update available 6.19.3 -> 7.9.1                       │
+│                                                         │
+│  This is a major update - please follow the guide at    │
+│  https://pris.ly/d/major-version-upgrade                │
+│                                                         │
+│  Run the following to update                            │
+│    npm i --save-dev prisma@latest                       │
+│    npm i @prisma/client@latest                          │
+└─────────────────────────────────────────────────────────┘
+

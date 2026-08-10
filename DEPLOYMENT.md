@@ -1,7 +1,8 @@
 # Deployment — Agenda Pro
 
 Complementa `docs/DEPLOY.md` com checklist operacional pós-hardening infra.
-Scorecard: [`docs/reviews/SCORECARD_DEVOPS.md`](./docs/reviews/SCORECARD_DEVOPS.md).
+Scorecard: [`docs/reviews/SCORECARD_DEVOPS.md`](./docs/reviews/SCORECARD_DEVOPS.md).  
+Migration `architecture_integrity`: diagnose + rollout em [`docs/DEPLOY.md`](./docs/DEPLOY.md) § *Rollout seguro* e [`docs/reviews/SCORECARD_MIGRATION_SAFETY.md`](./docs/reviews/SCORECARD_MIGRATION_SAFETY.md).
 
 ## Topologias
 

@@ -1,0 +1,21 @@
+Prisma schema loaded from apps\api\prisma\schema.prisma
+Datasource "db": PostgreSQL database "agenda_pro_mig_safety_r4", schema "public" at "localhost:5432"
+
+9 migrations found in prisma/migrations
+
+Applying migration `20260810010000_architecture_integrity`
+Error: P3018
+
+A migration failed to apply. New migrations cannot be applied before the error is recovered from. Read more about how to resolve migration issues in a production database: https://pris.ly/d/migrate-resolve
+
+Migration name: 20260810010000_architecture_integrity
+
+Database error code: 23P01
+
+Database error:
+ERROR: could not create exclusion constraint "appointments_no_overlap_active"
+DETAIL: Key ("professionalId", "slotRange")=(cmsluni5x0005v3wo7u39bpfd, ["2030-01-15 14:00:00+00","2030-01-15 15:00:00+00")) conflicts with key ("professionalId", "slotRange")=(cmsluni5x0005v3wo7u39bpfd, ["2030-01-15 14:30:00+00","2030-01-15 15:30:00+00")).
+
+DbError { severity: "ERROR", parsed_severity: Some(Error), code: SqlState(E23P01), message: "could not create exclusion constraint \"appointments_no_overlap_active\"", detail: Some("Key (\"professionalId\", \"slotRange\")=(cmsluni5x0005v3wo7u39bpfd, [\"2030-01-15 14:00:00+00\",\"2030-01-15 15:00:00+00\")) conflicts with key (\"professionalId\", \"slotRange\")=(cmsluni5x0005v3wo7u39bpfd, [\"2030-01-15 14:30:00+00\",\"2030-01-15 15:30:00+00\"))."), hint: None, position: None, where_: Some("SQL statement \"ALTER TABLE \"appointments\"\n      ADD CONSTRAINT \"appointments_no_overlap_active\"\n      EXCLUDE USING gist (\n        \"professionalId\" WITH =,\n        \"slotRange\" WITH &&\n      )\n      WHERE (status IN ('PENDING_PAYMENT', 'SCHEDULED', 'CONFIRMED'))\"\nPL/pgSQL function inline_code_block line 6 at SQL statement"), schema: Some("public"), table: Some("appointments"), column: None, datatype: None, constraint: Some("appointments_no_overlap_active"), file: Some("execIndexing.c"), line: Some(863), routine: Some("check_exclusion_or_unique_constraint") }
+
+

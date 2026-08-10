@@ -25,6 +25,8 @@
     "db:migrate": "npm run prisma:migrate -w @agenda-pro/api",
     "db:migrate:dev": "npm run prisma:migrate:dev -w @agenda-pro/api",
     "db:studio": "npm run prisma:studio -w @agenda-pro/api",
+    "db:migration-safety:diagnose": "node scripts/migration-safety/diagnose.mjs",
+    "db:migration-safety:clone-migrate": "powershell -ExecutionPolicy Bypass -File ./scripts/migration-safety/run-clone-migrate.ps1",
     "docker:up": "docker compose up -d",
     "docker:down": "docker compose down",
     "docker:prod:up": "docker compose -f docker-compose.prod.yml --env-file .env up -d --build",

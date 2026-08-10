@@ -1,0 +1,14 @@
+Prisma schema loaded from apps\api\prisma\schema.prisma
+Datasource "db": PostgreSQL database "agenda_pro_mig_safety_r4", schema "public" at "localhost:5432"
+
+9 migrations found in prisma/migrations
+
+Applying migration `20260810010000_architecture_integrity`
+
+The following migration(s) have been applied:
+
+migrations/
+  └─ 20260810010000_architecture_integrity/
+    └─ migration.sql
+      
+All migrations have been successfully applied.

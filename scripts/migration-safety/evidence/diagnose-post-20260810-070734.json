@@ -1,0 +1,14 @@
+{
+  "migration": "20260810010000_architecture_integrity",
+  "database": "agenda_pro_mig_safety_r4",
+  "checkedAt": "2026-08-10T10:07:41.996Z",
+  "overlap_pairs": 0,
+  "phone_soft_deletes": 0,
+  "waitlist_expires": 0,
+  "verdict": "OK",
+  "notes": {
+    "overlaps": "BLOCKER — EXCLUDE GiST fails; migration does not auto-resolve overlaps",
+    "phones": "dedup soft-deletes rn>1 (keeps oldest createdAt,id)",
+    "waitlist": "dedup sets status=EXPIRED for rn>1 open rows"
+  }
+}
