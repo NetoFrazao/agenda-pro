@@ -78,8 +78,8 @@ function StarPicker({ value, onChange }: { value: number; onChange: (v: number) 
           tabIndex={n === active ? 0 : -1}
           onClick={() => onChange(n)}
           onKeyDown={(e) => onKeyDown(e, n)}
-          className={`touch-target inline-flex items-center justify-center rounded-xl transition ${
-            n <= value ? 'text-brass' : 'text-line hover:text-brass/70'
+          className={`focus-ring touch-target inline-flex items-center justify-center rounded-xl transition ${
+            n <= value ? 'text-brass' : 'text-muted hover:text-brass'
           }`}
         >
           <Star
@@ -317,7 +317,7 @@ export default function ManageAppointmentPage() {
           <div className="min-w-0">
             <p className="text-sm font-medium text-mint-deep">Oi, {firstName}</p>
             <p className="mt-1 font-display text-2xl font-semibold tracking-tight text-ink sm:text-3xl">
-              Seu horário com {data.tenant.name}
+              Seu agendamento com {data.tenant.name}
             </p>
             <p className="mt-1 text-sm text-muted">Confirme, remarque ou cancele por aqui</p>
           </div>
@@ -398,7 +398,7 @@ export default function ManageAppointmentPage() {
             qrCodeBase64={data.pixCharge.qrCodeBase64}
             expiresAt={data.pixCharge.expiresAt}
             timezone={timezone}
-            note="Seu horário só fica confirmado depois do pagamento do sinal."
+            note="Seu agendamento só fica confirmado depois do pagamento do sinal."
           />
         ) : null}
 
@@ -447,7 +447,7 @@ export default function ManageAppointmentPage() {
                       setCancelOpen(false);
                     }}
                   >
-                    Remarcar horário
+                    Remarcar
                   </Button>
                   <Button
                     type="button"
@@ -483,7 +483,7 @@ export default function ManageAppointmentPage() {
                       Confirmar cancelamento
                     </Button>
                     <Button type="button" variant="ghost" onClick={() => setCancelOpen(false)}>
-                      Manter horário
+                      Manter agendamento
                     </Button>
                   </div>
                 </form>

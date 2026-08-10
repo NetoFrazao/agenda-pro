@@ -12,15 +12,15 @@ export function SiteHeader({ tone = 'light' }: { tone?: 'light' | 'dark' }) {
     <header className="relative z-20 flex items-center justify-between gap-4 px-6 py-5 sm:px-10">
       <BrandLogo size="sm" tone={tone} />
       <nav aria-label="Principal" className="flex items-center gap-1 sm:gap-2">
-        <Link href="/planos" className={`rounded-xl px-3 py-2.5 text-sm font-medium ${link}`}>
+        <Link href="/planos" className={`focus-ring rounded-xl px-3 py-2.5 text-sm font-medium ${link}`}>
           Planos
         </Link>
-        <Link href="/login" className={`rounded-xl px-3 py-2.5 text-sm font-medium ${link}`}>
+        <Link href="/login" className={`focus-ring rounded-xl px-3 py-2.5 text-sm font-medium ${link}`}>
           Entrar
         </Link>
         <Link
           href="/register"
-          className={`rounded-xl px-3.5 py-2.5 text-sm font-semibold transition ${cta}`}
+          className={`focus-ring rounded-xl px-3.5 py-2.5 text-sm font-semibold transition ${cta}`}
         >
           Criar conta
         </Link>
@@ -31,7 +31,7 @@ export function SiteHeader({ tone = 'light' }: { tone?: 'light' | 'dark' }) {
 
 export function SiteFooter({ tone = 'light' }: { tone?: 'light' | 'dark' }) {
   const border = tone === 'dark' ? 'border-white/10' : 'border-line/80';
-  const link = tone === 'dark' ? 'text-white/50 hover:text-white' : 'text-muted hover:text-ink';
+  const link = tone === 'dark' ? 'text-white/65 hover:text-white' : 'text-muted hover:text-ink';
 
   return (
     <footer className={`mt-auto border-t ${border} px-6 py-10 sm:px-10`}>
@@ -39,7 +39,7 @@ export function SiteFooter({ tone = 'light' }: { tone?: 'light' | 'dark' }) {
         <div>
           <BrandLogo size="sm" tone={tone} />
           <p
-            className={`mt-2 max-w-sm text-sm ${tone === 'dark' ? 'text-white/45' : 'text-muted'}`}
+            className={`mt-2 max-w-sm text-sm ${tone === 'dark' ? 'text-white/65' : 'text-muted'}`}
           >
             Agenda inteligente para barbeiros e manicures que vivem no WhatsApp.
           </p>

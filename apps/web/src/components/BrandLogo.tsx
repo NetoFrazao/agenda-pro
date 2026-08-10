@@ -31,7 +31,11 @@ export function BrandLogo({
 
   if (!href) return content;
   return (
-    <Link href={href} className="inline-block no-underline transition hover:opacity-90">
+    <Link
+      href={href}
+      aria-label="Agenda Pro"
+      className="focus-ring inline-block rounded-sm no-underline transition hover:opacity-90"
+    >
       {content}
     </Link>
   );

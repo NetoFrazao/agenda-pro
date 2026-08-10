@@ -438,7 +438,7 @@ export default function ClientsPage() {
                         <li key={tag}>
                           <button
                             type="button"
-                            className="inline-flex min-h-9 items-center gap-1 rounded-md bg-paper-2 px-2 py-1 text-[11px] font-semibold tracking-wide text-ink-muted transition hover:bg-warning-bg hover:text-warning-fg"
+                            className="focus-ring inline-flex min-h-11 items-center gap-1 rounded-md bg-paper-2 px-2.5 py-1.5 text-xs font-semibold tracking-wide text-ink-muted transition hover:bg-warning-bg hover:text-warning-fg"
                             onClick={() => {
                               setTags((prev) => prev.filter((t) => t !== tag));
                               setProfileSaved(false);
@@ -644,7 +644,7 @@ export default function ClientsPage() {
                 <button
                   type="button"
                   onClick={() => void openDetail(c.id)}
-                  className="surface-elevated w-full rounded-2xl p-4 text-left transition hover:border-mint-deep/40 focus-visible:ring-2 focus-visible:ring-mint-deep sm:p-5"
+                  className="surface-elevated focus-ring w-full rounded-2xl p-4 text-left transition hover:border-mint-deep/40 sm:p-5"
                 >
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div>

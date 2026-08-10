@@ -102,7 +102,7 @@ function DashboardChrome({ children }: { children: ReactNode }) {
                   key={item.href}
                   href={item.href}
                   onClick={onNavigate}
-                  className={`flex min-h-11 items-center rounded-xl px-3 py-2.5 text-[13px] font-medium transition ${
+                  className={`focus-ring flex min-h-11 items-center rounded-xl px-3 py-2.5 text-[13px] font-medium transition ${
                     active
                       ? 'bg-ink text-white shadow-sm'
                       : 'text-ink-muted hover:bg-black/[0.035] hover:text-ink'
@@ -142,9 +142,10 @@ function DashboardChrome({ children }: { children: ReactNode }) {
           <button
             ref={menuButtonRef}
             type="button"
-            className="touch-target inline-flex items-center justify-center gap-2 rounded-xl px-3 text-sm font-medium text-ink-muted ring-1 ring-line"
+            className="focus-ring touch-target inline-flex items-center justify-center gap-2 rounded-xl px-3 text-sm font-medium text-ink-muted ring-1 ring-line"
             aria-expanded={menuOpen}
             aria-controls={navId}
+            aria-label={menuOpen ? 'Fechar menu' : 'Abrir menu'}
             onClick={() => setMenuOpen((v) => !v)}
           >
             {menuOpen ? (
@@ -180,7 +181,7 @@ function DashboardChrome({ children }: { children: ReactNode }) {
             <BrandLogo href="/dashboard" size="sm" />
             <button
               type="button"
-              className="touch-target inline-flex items-center justify-center rounded-xl text-ink-muted ring-1 ring-line"
+              className="focus-ring touch-target inline-flex items-center justify-center rounded-xl text-ink-muted ring-1 ring-line"
               aria-label="Fechar menu"
               onClick={closeMenu}
             >

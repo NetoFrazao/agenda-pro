@@ -77,7 +77,7 @@ export function Toast({
           type="button"
           onClick={onClose}
           aria-label="Fechar notificação"
-          className="touch-target -mr-1 -mt-1 inline-flex size-11 shrink-0 items-center justify-center rounded-xl text-muted hover:bg-black/[0.04] hover:text-ink"
+          className="focus-ring touch-target -mr-1 -mt-1 inline-flex size-11 shrink-0 items-center justify-center rounded-xl text-muted hover:bg-black/[0.04] hover:text-ink"
         >
           <X className="size-4" aria-hidden strokeWidth={2} />
         </button>

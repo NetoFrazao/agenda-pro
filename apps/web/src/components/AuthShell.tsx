@@ -21,11 +21,11 @@ export function AuthShell({ title, description, children, footer }: AuthShellPro
           <p className="font-display text-3xl font-semibold leading-tight text-balance">
             Sua agenda, no ritmo certo.
           </p>
-          <p className="max-w-sm text-[15px] leading-relaxed text-white/55">
+          <p className="max-w-sm text-[15px] leading-relaxed text-white/70">
             Link público, lembretes automáticos e sinal no PIX — tudo em um só lugar para o seu
             negócio.
           </p>
-          <ul className="space-y-3 text-sm text-white/50">
+          <ul className="space-y-3 text-sm text-white/65">
             <li className="flex items-center gap-2.5">
               <span className="size-1.5 rounded-full bg-mint" aria-hidden />
               Agendamento online 24h
@@ -40,7 +40,7 @@ export function AuthShell({ title, description, children, footer }: AuthShellPro
             </li>
           </ul>
         </div>
-        <p className="relative z-10 text-xs text-white/30">© Agenda Pro</p>
+        <p className="relative z-10 text-xs text-white/55">© Agenda Pro</p>
       </aside>
 
       {/* Formulário */}
