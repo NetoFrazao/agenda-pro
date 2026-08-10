@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { FormEvent, useState } from 'react';
 import { AuthShell } from '@/components/AuthShell';
 import { Alert, Button, Field, Input } from '@/components/ui';
-import { api, ApiError } from '@/lib/api';
+import { api, ApiError, ensureCsrfToken } from '@/lib/api';
 import { setSessionFlag } from '@/lib/auth';
 import type { LoginResponse } from '@/lib/types';
 
@@ -49,6 +49,7 @@ export default function RegisterPage() {
       });
       // Sessão fica nos cookies httpOnly; só marcamos o flag de UX.
       setSessionFlag();
+      await ensureCsrfToken();
       router.replace('/dashboard');
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Não foi possível criar a conta.');

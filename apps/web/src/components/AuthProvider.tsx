@@ -10,7 +10,7 @@ import {
   type ReactNode,
 } from 'react';
 import { useRouter } from 'next/navigation';
-import { api, ApiError } from '@/lib/api';
+import { api, ApiError, clearCsrfToken, ensureCsrfToken } from '@/lib/api';
 import { clearSessionFlag, setSessionFlag } from '@/lib/auth';
 import type { AuthUserPayload, UserRole } from '@/lib/types';
 import { Spinner } from './ui';
@@ -48,8 +48,11 @@ export function AuthProvider({
       setMe(data);
       setSessionFlag();
       setStatus('authenticated');
+      // Aquece CSRF em memória (cross-origin não lê document.cookie da API).
+      void ensureCsrfToken();
       return data;
     } catch (err) {
+      clearCsrfToken();
       clearSessionFlag();
       setMe(null);
       setStatus('anonymous');
@@ -77,6 +80,7 @@ export function AuthProvider({
     try {
       await api('/api/auth/logout', { method: 'POST', body: {} }).catch(() => null);
     } finally {
+      clearCsrfToken();
       clearSessionFlag();
       setMe(null);
       setStatus('anonymous');

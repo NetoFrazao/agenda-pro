@@ -56,6 +56,12 @@ Não é 9+: testes web ainda no-op; StarPicker teclado aberto; `User.role` ainda
 ### Lint
 - `npm run lint -w @agenda-pro/web` — **OK (0 warnings / 0 errors)**
 
+### Follow-up CSRF (Agente 1 / `2ae0303`)
+- `lib/api.ts`: mutações `auth=true` (POST/PATCH/PUT/DELETE) enviam `X-CSRF-Token`.
+- Fonte do token: memória → `document.cookie` (`ap_csrf`) → `GET /api/auth/csrf` (`body.csrfToken`).
+- `tryRefresh` / logout cobertos; retry único em 403 CSRF; AuthProvider aquece token pós-`/me`.
+- Login/register usam `auth: false` (sem cookie de acesso → guard isento) e aquecem CSRF após sucesso.
+
 ---
 
 ## Breaking / avisos (coordenação)
@@ -63,6 +69,7 @@ Não é 9+: testes web ainda no-op; StarPicker teclado aberto; `User.role` ainda
 ### Breaking (comportamento UI)
 1. **Nav MEMBER filtrada:** itens CRM/owner some do menu. Deep-link em `/dashboard/clients` mostra empty state “Acesso restrito”. Depende de Agente 1 garantir `user.role` em `/auth/me` e filtro server-side de appointments.
 2. **Filtros de data:** ISO enviados à API passam a ser meia-noite/fim-do-dia **no TZ do tenant**. Ranges podem mudar ±1 dia vs browser em fusos distantes — esperado e desejado.
+3. **CSRF cookie-auth (Agente 1):** mutações autenticadas por cookie exigem header `X-CSRF-Token` == cookie `ap_csrf`. SPA cobre isso em `api()` central — **sem mudar cada página**. Escopo backend: refresh/logout, clients, appointments, team (+ o que o guard for aplicado).
 
 ### Avisos (não breaking de tipo)
 1. **`lib/types.ts` `User.role` permanece `string?`** — UI faz cast para `OWNER | MEMBER`. Se Agente 1 tipar formalmente `role: UserRole`, alinhar (melhoria, não exigido neste diff para evitar drift).
@@ -70,9 +77,12 @@ Não é 9+: testes web ainda no-op; StarPicker teclado aberto; `User.role` ainda
 3. **AuthProvider `requireAuth`:** um refresh de sessão no shell; `refresh()` em billing pode revalidar — não duplica probe por page mount.
 4. **Onboarding:** dismiss local; não sincroniza com backend. Wizard só para não-MEMBER.
 5. **StatCard 7 dias:** `total` da API ainda pode incluir cancelados se o backend não filtrar — aviso herdado.
+6. **CSRF cross-origin:** com `NEXT_PUBLIC_API_URL` em outro origin (ex.: `:3000`→`:3001`), `document.cookie` **não** lê `ap_csrf` do domínio da API. O cookie **não é HttpOnly** (OK para double-submit), mas o SPA depende de `GET /api/auth/csrf` + cache em memória. Same-origin (proxy) também funciona via cookie. **Sem blocker** enquanto `/auth/csrf` existir.
+7. **CSRF pós-refresh:** refresh rotaciona `ap_csrf`; `api()` limpa cache e reemite via `/auth/csrf` antes do retry.
 
 ### Sem mudança de contrato tipado
 - Nenhum campo novo obrigatório em `AppointmentListResponse` / payloads de booking.
+- CSRF não exige mudança em `types.ts` (header + cookie opacos).
 
 ---
 
@@ -93,6 +103,8 @@ Não é 9+: testes web ainda no-op; StarPicker teclado aberto; `User.role` ainda
 - `apps/web/src/components/OnboardingWizard.tsx` **(novo)**
 - `apps/web/src/components/DashboardShell.tsx`
 - `apps/web/src/lib/format.ts`
+- `apps/web/src/lib/api.ts` *(CSRF double-submit)*
+- `apps/web/src/app/login/page.tsx` / `register/page.tsx` *(warm CSRF)*
 - `apps/web/src/app/dashboard/page.tsx`
 - `apps/web/src/app/dashboard/appointments/page.tsx`
 - `apps/web/src/app/dashboard/{clients,reports,reviews,billing,settings}/**`
