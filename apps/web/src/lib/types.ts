@@ -1,15 +1,20 @@
 /** Tipos alinhados ao contrato da API Agenda Pro. */
 
-export type PlanCode = 'STARTER' | 'PRO' | 'BUSINESS';
+export type {
+  AppointmentStatus,
+  PlanCode,
+  PixChargeStatus,
+  UserRole,
+  WaitlistEntryStatus,
+} from '@agenda-pro/shared';
 
-export type AppointmentStatus =
-  'PENDING_PAYMENT' | 'SCHEDULED' | 'CONFIRMED' | 'COMPLETED' | 'CANCELLED' | 'NO_SHOW';
-
-export type UserRole = 'OWNER' | 'MEMBER';
-
-export type PixChargeStatus = 'PENDING' | 'PAID' | 'EXPIRED' | 'CANCELLED';
-
-export type WaitlistEntryStatus = 'WAITING' | 'NOTIFIED';
+export {
+  APPOINTMENT_STATUSES,
+  PIX_CHARGE_STATUSES,
+  PLAN_CODES,
+  USER_ROLES,
+  WAITLIST_STATUSES,
+} from '@agenda-pro/shared';
 
 export interface User {
   id: string;
@@ -33,7 +38,7 @@ export interface AuthUserPayload {
   tenant: Tenant;
 }
 
-/** Tokens ainda vêm no body, mas a sessão real vive em cookies httpOnly. */
+/** Sessão real em cookies httpOnly; body de login/register traz só user/tenant. */
 export interface LoginResponse {
   accessToken?: string;
   refreshToken?: string;

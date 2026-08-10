@@ -1,0 +1,27 @@
+{
+  "name": "@agenda-pro/shared",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Tipos e enums compartilhados entre API e Web (contratos de domínio)",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "require": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "lint": "tsc -p tsconfig.json --noEmit",
+    "test": "echo \"shared: no unit tests\""
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3"
+  }
+}

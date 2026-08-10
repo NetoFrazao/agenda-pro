@@ -1,6 +1,6 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { AppointmentStatus, PixChargeStatus } from '@prisma/client';
-import { AppointmentsService } from './appointments.service';
+import { createAppointmentsTestFacade } from './appointments-test.util';
 import { generateManageToken, hashToken } from '../common/crypto/tokens';
 
 function baseDeps(overrides?: {
@@ -52,19 +52,17 @@ describe('AppointmentsService — orquestração notifications / FSM', () => {
 
     const update = jest.fn();
     const { notifications, cache, loyalty } = baseDeps();
-    const service = new AppointmentsService(
-      {
+    const { service } = createAppointmentsTestFacade({
+      prisma: {
         appointment: {
           findUnique: jest.fn().mockResolvedValue(appointment),
           update,
         },
-      } as never,
-      notifications as never,
-      { isConfigured: false } as never,
-      { appPublicUrl: 'http://localhost:3000' } as never,
-      loyalty as never,
-      cache as never,
-    );
+      },
+      notifications,
+      loyalty,
+      cache,
+    });
 
     await expect(service.cancelByToken(raw)).rejects.toBeInstanceOf(BadRequestException);
     expect(update).not.toHaveBeenCalled();
@@ -98,8 +96,8 @@ describe('AppointmentsService — orquestração notifications / FSM', () => {
       plan: 'PRO',
     });
     const { notifications, cache, loyalty } = baseDeps();
-    const service = new AppointmentsService(
-      {
+    const { service } = createAppointmentsTestFacade({
+      prisma: {
         appointment: {
           findUnique: jest.fn().mockResolvedValue(appointment),
           update,
@@ -117,13 +115,11 @@ describe('AppointmentsService — orquestração notifications / FSM', () => {
             },
           }),
         ),
-      } as never,
-      notifications as never,
-      { isConfigured: false } as never,
-      { appPublicUrl: 'http://localhost:3000' } as never,
-      loyalty as never,
-      cache as never,
-    );
+      },
+      notifications,
+      loyalty,
+      cache,
+    });
 
     await expect(service.cancelByToken(raw, 'mudou de ideia')).resolves.toEqual({ ok: true });
     expect(update).toHaveBeenCalledWith({
@@ -164,8 +160,8 @@ describe('AppointmentsService — orquestração notifications / FSM', () => {
     });
     const row = { id: 'a1', status: AppointmentStatus.CANCELLED };
     const { notifications, cache, loyalty } = baseDeps();
-    const service = new AppointmentsService(
-      {
+    const { service } = createAppointmentsTestFacade({
+      prisma: {
         appointment: { findFirst },
         waitlistEntry: {
           findFirst: jest.fn().mockResolvedValue(null),
@@ -182,13 +178,11 @@ describe('AppointmentsService — orquestração notifications / FSM', () => {
             },
           }),
         ),
-      } as never,
-      notifications as never,
-      {} as never,
-      { appPublicUrl: 'http://localhost:3000' } as never,
-      loyalty as never,
-      cache as never,
-    );
+      },
+      notifications,
+      loyalty,
+      cache,
+    });
 
     await expect(
       service.updateStatus('t1', 'a1', AppointmentStatus.CANCELLED),
@@ -229,21 +223,19 @@ describe('AppointmentsService — orquestração notifications / FSM', () => {
     const { notifications, cache } = baseDeps({
       loyalty: { creditForCompletedAppointment: credit },
     });
-    const service = new AppointmentsService(
-      {
+    const { service } = createAppointmentsTestFacade({
+      prisma: {
         appointment: { findFirst },
         $transaction: jest.fn(async (fn: (tx: unknown) => Promise<unknown>) =>
           fn({
             appointment: { update: jest.fn().mockResolvedValue(row) },
           }),
         ),
-      } as never,
-      notifications as never,
-      {} as never,
-      { appPublicUrl: 'http://localhost:3000' } as never,
-      { creditForCompletedAppointment: credit } as never,
-      cache as never,
-    );
+      },
+      notifications,
+      loyalty: { creditForCompletedAppointment: credit },
+      cache,
+    });
 
     const result = await service.updateStatus('t1', 'a1', AppointmentStatus.COMPLETED);
     expect(credit).toHaveBeenCalled();
@@ -257,14 +249,12 @@ describe('AppointmentsService — orquestração notifications / FSM', () => {
 
   it('updateStatus 404 quando appointment não pertence ao tenant', async () => {
     const { notifications, cache, loyalty } = baseDeps();
-    const service = new AppointmentsService(
-      { appointment: { findFirst: jest.fn().mockResolvedValue(null) } } as never,
-      notifications as never,
-      {} as never,
-      { appPublicUrl: 'http://localhost:3000' } as never,
-      loyalty as never,
-      cache as never,
-    );
+    const { service } = createAppointmentsTestFacade({
+      prisma: { appointment: { findFirst: jest.fn().mockResolvedValue(null) } },
+      notifications,
+      loyalty,
+      cache,
+    });
     await expect(
       service.updateStatus('t1', 'missing', AppointmentStatus.CANCELLED),
     ).rejects.toBeInstanceOf(NotFoundException);
@@ -275,14 +265,12 @@ describe('AppointmentsService — orquestração notifications / FSM', () => {
     const findMany = jest.fn().mockResolvedValue(items);
     const count = jest.fn().mockResolvedValue(2);
     const { notifications, cache, loyalty } = baseDeps();
-    const service = new AppointmentsService(
-      { appointment: { findMany, count } } as never,
-      notifications as never,
-      {} as never,
-      { appPublicUrl: 'http://localhost:3000' } as never,
-      loyalty as never,
-      cache as never,
-    );
+    const { service } = createAppointmentsTestFacade({
+      prisma: { appointment: { findMany, count } },
+      notifications,
+      loyalty,
+      cache,
+    });
 
     const page = await service.list('t1', { page: 1, pageSize: 50 });
     expect(page).toEqual({
@@ -302,8 +290,8 @@ describe('AppointmentsService — orquestração notifications / FSM', () => {
     const raw = generateManageToken();
     const update = jest.fn();
     const { notifications, cache, loyalty } = baseDeps();
-    const service = new AppointmentsService(
-      {
+    const { service } = createAppointmentsTestFacade({
+      prisma: {
         appointment: {
           findUnique: jest.fn().mockResolvedValue({
             id: 'a1',
@@ -319,13 +307,11 @@ describe('AppointmentsService — orquestração notifications / FSM', () => {
           }),
           update,
         },
-      } as never,
-      notifications as never,
-      {} as never,
-      { appPublicUrl: 'http://localhost:3000' } as never,
-      loyalty as never,
-      cache as never,
-    );
+      },
+      notifications,
+      loyalty,
+      cache,
+    });
 
     await expect(service.confirmByToken(raw)).resolves.toEqual({
       ok: true,
@@ -338,8 +324,8 @@ describe('AppointmentsService — orquestração notifications / FSM', () => {
     const raw = generateManageToken();
     const hashed = hashToken(raw);
     const { notifications, cache, loyalty } = baseDeps();
-    const service = new AppointmentsService(
-      {
+    const { service } = createAppointmentsTestFacade({
+      prisma: {
         appointment: {
           findUnique: jest.fn().mockResolvedValue({
             id: 'a1',
@@ -364,13 +350,11 @@ describe('AppointmentsService — orquestração notifications / FSM', () => {
             review: null,
           }),
         },
-      } as never,
-      notifications as never,
-      {} as never,
-      { appPublicUrl: 'http://localhost:3000' } as never,
-      loyalty as never,
-      cache as never,
-    );
+      },
+      notifications,
+      loyalty,
+      cache,
+    });
 
     const detail = await service.getByManageToken(raw);
     expect(detail.client.phone).toBe('****4321');

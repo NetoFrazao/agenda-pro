@@ -21,6 +21,7 @@
     "prisma:seed": "tsx --env-file=.env --env-file=../../.env prisma/seed.ts"
   },
   "dependencies": {
+    "@agenda-pro/shared": "*",
     "@nest-lab/throttler-storage-redis": "^1.2.0",
     "@nestjs/common": "^11.0.7",
     "@nestjs/config": "^4.0.0",
@@ -105,7 +106,8 @@
     },
     "testEnvironment": "node",
     "moduleNameMapper": {
-      "^@/(.*)$": "<rootDir>/src/$1"
+      "^@/(.*)$": "<rootDir>/src/$1",
+      "^@agenda-pro/shared$": "<rootDir>/../../packages/shared/src/index.ts"
     }
   },
   "prisma": {

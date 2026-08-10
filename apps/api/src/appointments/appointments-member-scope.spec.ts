@@ -1,18 +1,12 @@
-import { AppointmentsService } from './appointments.service';
+import { createAppointmentsTestFacade } from './appointments-test.util';
 
 describe('AppointmentsService.list — RBAC MEMBER', () => {
   it('MEMBER força professionalId = actor.userId (ignora query alheia)', async () => {
     const findMany = jest.fn().mockResolvedValue([]);
     const count = jest.fn().mockResolvedValue(0);
-    const prisma = { appointment: { findMany, count } };
-    const service = new AppointmentsService(
-      prisma as never,
-      {} as never,
-      {} as never,
-      {} as never,
-      {} as never,
-      {} as never,
-    );
+    const { service } = createAppointmentsTestFacade({
+      prisma: { appointment: { findMany, count } },
+    });
 
     await service.list('tenant-1', {
       professionalId: 'other-pro',
@@ -32,15 +26,9 @@ describe('AppointmentsService.list — RBAC MEMBER', () => {
   it('OWNER respeita filtro professionalId da query', async () => {
     const findMany = jest.fn().mockResolvedValue([]);
     const count = jest.fn().mockResolvedValue(0);
-    const prisma = { appointment: { findMany, count } };
-    const service = new AppointmentsService(
-      prisma as never,
-      {} as never,
-      {} as never,
-      {} as never,
-      {} as never,
-      {} as never,
-    );
+    const { service } = createAppointmentsTestFacade({
+      prisma: { appointment: { findMany, count } },
+    });
 
     await service.list('tenant-1', {
       professionalId: 'pro-2',
