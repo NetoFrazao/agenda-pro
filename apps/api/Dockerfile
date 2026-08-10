@@ -8,6 +8,7 @@ RUN apk add --no-cache openssl
 COPY package.json package-lock.json ./
 COPY apps/api/package.json ./apps/api/
 COPY apps/web/package.json ./apps/web/
+COPY packages/shared/package.json ./packages/shared/
 RUN npm ci
 
 FROM node:20-alpine AS build
@@ -16,8 +17,11 @@ RUN apk add --no-cache openssl
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/package.json /app/package-lock.json ./
 COPY --from=deps /app/apps/api/package.json ./apps/api/
+COPY --from=deps /app/packages/shared/package.json ./packages/shared/
+COPY packages/shared ./packages/shared
 COPY apps/api ./apps/api
-RUN npx prisma generate --schema apps/api/prisma/schema.prisma \
+RUN npm run build -w @agenda-pro/shared \
+  && npx prisma generate --schema apps/api/prisma/schema.prisma \
   && npm run build -w @agenda-pro/api \
   && npm prune --omit=dev
 
@@ -30,6 +34,7 @@ RUN apk add --no-cache openssl wget \
 COPY --from=build --chown=app:app /app/node_modules ./node_modules
 COPY --from=build --chown=app:app /app/package.json ./
 COPY --from=build --chown=app:app /app/apps/api/package.json ./apps/api/
+COPY --from=build --chown=app:app /app/packages/shared ./packages/shared
 COPY --from=build --chown=app:app /app/apps/api/dist ./apps/api/dist
 COPY --from=build --chown=app:app /app/apps/api/prisma ./apps/api/prisma
 

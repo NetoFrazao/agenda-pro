@@ -19,7 +19,8 @@
     "forceConsistentCasingInFileNames": true,
     "noFallthroughCasesInSwitch": true,
     "paths": {
-      "@/*": ["src/*"]
+      "@/*": ["src/*"],
+      "@agenda-pro/shared": ["../../packages/shared/src/index.ts"]
     },
     "types": ["node", "jest"]
   },

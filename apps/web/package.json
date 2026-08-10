@@ -11,6 +11,7 @@
     "test:e2e": "playwright test --config=../../e2e/playwright.config.ts"
   },
   "dependencies": {
+    "@agenda-pro/shared": "*",
     "next": "^15.1.6",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"

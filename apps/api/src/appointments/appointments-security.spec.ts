@@ -1,6 +1,6 @@
 import { BadRequestException, ConflictException } from '@nestjs/common';
 import { AppointmentStatus, PixChargeStatus, SubscriptionStatus } from '@prisma/client';
-import { AppointmentsService } from './appointments.service';
+import { createAppointmentsTestFacade } from './appointments-test.util';
 import { generateManageToken, hashToken } from '../common/crypto/tokens';
 
 describe('AppointmentsService — PIX confirm + manageToken', () => {
@@ -16,14 +16,12 @@ describe('AppointmentsService — PIX confirm + manageToken', () => {
     const prisma = {
       appointment: { findUnique, update },
     };
-    const service = new AppointmentsService(
-      prisma as never,
-      { enqueueBookingConfirmation: jest.fn() } as never,
-      { isConfigured: false } as never,
-      { appPublicUrl: 'http://localhost:3000' } as never,
-      {} as never,
-      { invalidatePublicProfile: jest.fn(), invalidatePublicSlots: jest.fn() } as never,
-    );
+    const { service } = createAppointmentsTestFacade({
+      prisma,
+      notifications: { enqueueBookingConfirmation: jest.fn() },
+      mercadoPago: { isConfigured: false },
+      cache: { invalidatePublicProfile: jest.fn(), invalidatePublicSlots: jest.fn() },
+    });
     return { service, update, findUnique };
   }
 
@@ -131,26 +129,16 @@ describe('AppointmentsService — PIX confirm + manageToken', () => {
         return null;
       });
 
-    const serviceHash = new AppointmentsService(
-      { appointment: { findUnique: findHash, update: jest.fn() } } as never,
-      {} as never,
-      {} as never,
-      { appPublicUrl: 'http://localhost:3000' } as never,
-      {} as never,
-      {} as never,
-    );
+    const { service: serviceHash } = createAppointmentsTestFacade({
+      prisma: { appointment: { findUnique: findHash, update: jest.fn() } },
+    });
     const byHash = await serviceHash.getByManageToken(raw);
     expect(byHash.id).toBe('hashed');
     expect(byHash).not.toHaveProperty('manageToken');
 
-    const serviceLegacy = new AppointmentsService(
-      { appointment: { findUnique, update: jest.fn() } } as never,
-      {} as never,
-      {} as never,
-      { appPublicUrl: 'http://localhost:3000' } as never,
-      {} as never,
-      {} as never,
-    );
+    const { service: serviceLegacy } = createAppointmentsTestFacade({
+      prisma: { appointment: { findUnique, update: jest.fn() } },
+    });
     const byLegacy = await serviceLegacy.getByManageToken('cllegacytoken000000000001');
     expect(byLegacy.id).toBe('legacy');
   });
@@ -172,14 +160,10 @@ describe('AppointmentsService — updateStatus PIX gate + PAST_DUE book', () => 
     });
     const update = jest.fn();
     const cancelPending = jest.fn();
-    const service = new AppointmentsService(
-      { appointment: { findFirst, update }, $transaction: jest.fn() } as never,
-      { cancelPendingForAppointment: cancelPending } as never,
-      {} as never,
-      { appPublicUrl: 'http://localhost:3000' } as never,
-      {} as never,
-      {} as never,
-    );
+    const { service } = createAppointmentsTestFacade({
+      prisma: { appointment: { findFirst, update }, $transaction: jest.fn() },
+      notifications: { cancelPendingForAppointment: cancelPending },
+    });
 
     await expect(
       service.updateStatus('t1', 'a1', AppointmentStatus.CONFIRMED),
@@ -188,8 +172,8 @@ describe('AppointmentsService — updateStatus PIX gate + PAST_DUE book', () => 
   });
 
   it('bookPublic rejeita tenant com subscription PAST_DUE', async () => {
-    const service = new AppointmentsService(
-      {
+    const { service } = createAppointmentsTestFacade({
+      prisma: {
         tenant: {
           findFirst: jest.fn().mockResolvedValue({
             id: 't1',
@@ -199,13 +183,9 @@ describe('AppointmentsService — updateStatus PIX gate + PAST_DUE book', () => 
           }),
         },
         service: { findFirst: jest.fn() },
-      } as never,
-      {} as never,
-      { isConfigured: false } as never,
-      { appPublicUrl: 'http://localhost:3000' } as never,
-      {} as never,
-      {} as never,
-    );
+      },
+      mercadoPago: { isConfigured: false },
+    });
 
     await expect(
       service.bookPublic('barber', {
@@ -246,8 +226,8 @@ describe('AppointmentsService — updateStatus PIX gate + PAST_DUE book', () => 
       maxAdvanceDays: 60,
     });
 
-    const service = new AppointmentsService(
-      {
+    const { service, availability, manage } = createAppointmentsTestFacade({
+      prisma: {
         appointment: {
           findUnique: findUniqueAppt,
           findMany: jest.fn().mockResolvedValue([]),
@@ -272,34 +252,22 @@ describe('AppointmentsService — updateStatus PIX gate + PAST_DUE book', () => 
         user: {
           findFirst: jest.fn().mockResolvedValue({ id: 'p1', name: 'Pro', isActive: true }),
         },
-      } as never,
-      {
+      },
+      notifications: {
         cancelPendingForAppointment: cancelPending,
         enqueueBookingConfirmation: enqueueConfirmation,
-      } as never,
-      {} as never,
-      { appPublicUrl: 'http://localhost:3000' } as never,
-      {} as never,
-      { invalidatePublicSlots: jest.fn() } as never,
-    );
+      },
+      cache: { invalidatePublicSlots: jest.fn() },
+    });
 
-    // Force slot validation by stubbing private compute path via spy
-    jest.spyOn(service as never, 'computeSlotsFor' as never).mockResolvedValue([startsAt] as never);
-    jest
-      .spyOn(service as never, 'assertWithinBookingWindow' as never)
-      .mockImplementation((() => undefined) as never);
-    jest.spyOn(service as never, 'resolveProfessional' as never).mockResolvedValue({
+    const newStarts = new Date(startsAt.getTime() + 3_600_000);
+    jest.spyOn(availability, 'computeSlotsFor').mockResolvedValue([newStarts]);
+    jest.spyOn(availability, 'assertWithinBookingWindow').mockImplementation(() => undefined);
+    jest.spyOn(availability, 'resolveProfessional').mockResolvedValue({
       id: 'p1',
       name: 'Pro',
     } as never);
-    jest
-      .spyOn(service as never, 'findByManageToken' as never)
-      .mockResolvedValue(appointment as never);
-
-    const newStarts = new Date(startsAt.getTime() + 3_600_000);
-    jest
-      .spyOn(service as never, 'computeSlotsFor' as never)
-      .mockResolvedValue([newStarts] as never);
+    jest.spyOn(manage, 'findByManageToken').mockResolvedValue(appointment as never);
 
     await expect(
       service.rescheduleByToken(raw, { startsAt: newStarts.toISOString() } as never),

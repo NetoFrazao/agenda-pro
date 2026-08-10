@@ -8,6 +8,7 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 COPY apps/api/package.json ./apps/api/
 COPY apps/web/package.json ./apps/web/
+COPY packages/shared/package.json ./packages/shared/
 RUN npm ci --workspace=@agenda-pro/web --include-workspace-root
 
 FROM node:20-alpine AS build
@@ -15,13 +16,15 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/package.json /app/package-lock.json ./
 COPY --from=deps /app/apps/web/package.json ./apps/web/
+COPY --from=deps /app/packages/shared/package.json ./packages/shared/
+COPY packages/shared ./packages/shared
 COPY apps/web ./apps/web
 ARG NEXT_PUBLIC_API_URL=http://localhost:3001
 ARG NEXT_PUBLIC_APP_URL=http://localhost:3000
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL \
     NEXT_PUBLIC_APP_URL=$NEXT_PUBLIC_APP_URL \
     NEXT_TELEMETRY_DISABLED=1
-RUN npm run build -w @agenda-pro/web
+RUN npm run build -w @agenda-pro/shared && npm run build -w @agenda-pro/web
 
 FROM node:20-alpine AS runner
 WORKDIR /app

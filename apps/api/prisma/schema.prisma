@@ -6,7 +6,8 @@
 // - Datas de agendamento em UTC (DateTime); fuso fica em Tenant/User.
 // - Preço do serviço é por Tenant (centavos), sem tabela global de preços.
 // - Planos com preços via env no app; aqui só a estrutura de limites/features.
-// - Anti double-booking: unique (professionalId, startsAt); overlap na Fase 3.
+// - Anti double-booking: unique parcial ativos (professionalId, startsAt) + EXCLUDE GiST;
+//   overlap com buffer permanece na app (advisory lock).
 // =============================================================================
 
 generator client {
@@ -69,6 +70,7 @@ model Tenant {
   reviews              Review[]
   pixCharges           PixCharge[]
   loyaltyTransactions  LoyaltyTransaction[]
+  notificationJobs     NotificationJob[]
 
   @@map("tenants")
 }
@@ -108,7 +110,10 @@ model User {
   availabilityExceptions AvailabilityException[]
   refreshTokens       RefreshToken[]
   passwordResetTokens PasswordResetToken[]
+  waitlistEntries     WaitlistEntry[]
 
+  /// Unique absoluto no Prisma; em prod preferir parcial `WHERE deletedAt IS NULL`
+  /// (migration `20260810010000_architecture_integrity`).
   @@unique([tenantId, email])
   @@index([tenantId])
   @@map("users")
@@ -163,8 +168,9 @@ model Service {
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
-  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  appointments Appointment[]
+  tenant          Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  appointments    Appointment[]
+  waitlistEntries WaitlistEntry[]
 
   @@index([tenantId, isActive])
   /// Listagens dashboard / book: tenant + soft-delete
@@ -244,6 +250,8 @@ model Client {
   appointments        Appointment[]
   loyaltyTransactions LoyaltyTransaction[]
 
+  /// Índice de busca; unique parcial ativos em SQL:
+  /// `clients_tenantId_phone_active_key` WHERE deletedAt IS NULL
   @@index([tenantId, phone])
   @@index([tenantId, email])
   /// CRM list: sempre filtra soft-delete
@@ -271,8 +279,9 @@ model LoyaltyTransaction {
   ref           String?        @db.VarChar(120)
   createdAt     DateTime       @default(now())
 
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  tenant      Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  client      Client       @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  appointment Appointment? @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
 
   @@unique([appointmentId, type])
   @@index([tenantId, clientId, createdAt])
@@ -313,12 +322,14 @@ model Appointment {
   createdAt      DateTime          @default(now())
   updatedAt      DateTime          @updatedAt
 
-  tenant       Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  professional User       @relation(fields: [professionalId], references: [id], onDelete: Restrict)
-  client       Client     @relation(fields: [clientId], references: [id], onDelete: Restrict)
-  service      Service    @relation(fields: [serviceId], references: [id], onDelete: Restrict)
-  review       Review?
-  pixCharge    PixCharge?
+  tenant              Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  professional        User                 @relation(fields: [professionalId], references: [id], onDelete: Restrict)
+  client              Client               @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  service             Service              @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+  review              Review?
+  pixCharge           PixCharge?
+  loyaltyTransactions LoyaltyTransaction[]
+  notificationJobs    NotificationJob[]
 
   @@index([tenantId, startsAt])
   /// Reports (groupBy status + range) e listagens filtradas por status
@@ -330,7 +341,8 @@ model Appointment {
   /// CRM metrics: groupBy clientId + status (page-scoped / segment rank)
   @@index([tenantId, clientId, status, startsAt])
   /// Unique parcial ativos: migration `20260809270000_phase1_appointments_active_unique`
-  /// (CANCELLED/NO_SHOW/COMPLETED liberam o slot). Overlap parcial = lock na app.
+  /// EXCLUDE GiST overlap: `20260810010000_architecture_integrity` (complementa lock da app).
+  /// CHECKs endsAt > startsAt / price/duration: mesma migration.
   @@map("appointments")
 }
 
@@ -396,6 +408,9 @@ model NotificationJob {
   processedAt DateTime?
   createdAt   DateTime              @default(now())
   updatedAt   DateTime              @updatedAt
+
+  tenant      Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  appointment Appointment? @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
 
   @@index([status, scheduledFor])
   @@index([tenantId])
@@ -486,8 +501,11 @@ model WaitlistEntry {
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
 
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant       Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  service      Service? @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+  professional User?    @relation(fields: [professionalId], references: [id], onDelete: SetNull)
 
+  /// Unique parcial abertos: (tenantId, dateKey, clientPhone) WHERE WAITING|NOTIFIED
   @@index([tenantId, dateKey, status])
   @@map("waitlist_entries")
 }
