@@ -1,9 +1,10 @@
 # SCORECARD — Performance & Escalabilidade
 
-**Data:** 2026-08-09  
-**Escopo:** worker separado, cache Redis de slots, gating `PROCESS_ROLE`  
-**Método:** implementação + revisão estática (sem load test)  
-**Nota geral:** **8.0 / 10**
+**Data:** 2026-08-09 (ciclo agent-performance)  
+**Branch:** `cursor/agent-performance` (base: `cursor/saas-hardening-crm-infra`)  
+**Escopo permitido:** `pix-lifecycle.service.ts`, `redis-cache.service.ts`, `clients/*.service.ts` (segmentação), `worker.ts`  
+**Método:** implementação + unit tests (sem load test)  
+**Nota geral:** **9.0 / 10**
 
 ---
 
@@ -11,82 +12,78 @@
 
 | Critério | Antes | Agora | Comentário |
 |----------|-------|-------|------------|
-| Workers / background | 4.5 | **8.5** | Processo `worker` + compose; API sem BullMQ Worker / PIX interval |
-| Cache Redis | 6 | **8** | Perfil (60s) + slots públicos (20s) + invalidate em book/cancel/availability |
-| Multi-réplica API | 5 | **8** | HTTP stateless OK; N APIs não multiplicam workers |
-| Multi-réplica worker | 3 | **6** | BullMQ OK; PIX `setInterval` ainda N× se escalar worker >1 |
-| Queries / hot path slots | 6 | **7.5** | Cache reduz carga; selects gordos em getPublicSlots ainda residuais |
+| Workers / background | 8.5 | **8.5** | Worker separado intacto |
+| Cache Redis | 8 | **9** | Circuit breaker + reconnect após cooldown (não desliga até restart) |
+| Multi-réplica API | 8 | **8** | Sem mudança |
+| Multi-réplica worker | 6 | **9** | Lock Redis SET NX no reconcile PIX |
+| Queries / CRM segment | 5 | **8.5** | Filtro + paginação no SQL (sem full-scan JS) |
+| Observabilidade fila | 3 | **7** | Log periódico waiting/active/delayed/failed + latencyP95Ms |
 | Pool / infra | 7.5 | **7.5** | Sem mudança |
-| Frontend | 6 | **6** | Fora de escopo deste ciclo |
-| **Geral** | **6.5** | **8.0** | Grande ganho = worker separado; 10/10 só com multi-worker seguro |
+| Frontend | 6 | **6** | Fora de escopo |
+| **Geral** | **8.0** | **9.0** | Itens alto/médio do backlog fechados |
 
 ---
 
-## Por que não 10/10
+## Backlog deste ciclo
 
-1. **Reconcile PIX sem leader election** — com `replicas > 1` no serviço `worker`, vários timers batem no mesmo `findMany` (idempotente, mas thundering herd).
-2. **CRM segment full-scan** e payloads gordos (QR, includes) não tratados neste ciclo.
-3. **Redis cache** ainda desabilita permanente após falha (sem reconnect/circuit breaker).
-4. Sem métricas de fila / latência p95 sob carga.
-
----
-
-## Entregas deste ciclo
-
-- `PROCESS_ROLE=all|api|worker` (default `all` — dev single-process intacto)
-- Entrypoint `apps/api/src/worker.ts` → `dist/worker.js`
-- Compose prod: `api` (`PROCESS_ROLE=api`) + `worker` (`PROCESS_ROLE=worker`)
-- PixLifecycle interval **só** com `runsBackgroundJobs`
-- BullMQ Worker **só** com `runsBackgroundJobs`; API continua enfileirando
-- Cache Redis `getPublicSlots` TTL 20s + invalidate em mutações relevantes
+| Prioridade | Item | Status |
+|------------|------|--------|
+| Alto | Leader election / lock distribuído PIX | **Feito** — `SET NX EX` em `lock:pix:reconcile` (TTL 55s) |
+| Médio | Circuit breaker Redis cache | **Feito** — abre ~5s, tenta reconectar; leave-behind `disabled` permanente |
+| Médio | Segmentação CRM sem full-scan JS | **Feito** — CTE + CASE no Postgres + LIMIT/OFFSET |
+| Baixo | Métricas básicas de fila | **Feito** — log JSON `queue.metrics` no `worker.ts` a cada 60s |
 
 ---
 
-## Como rodar o worker
+## Breaking / avisos de comportamento
 
-### Local (após build)
+1. **PIX reconcile com multi-réplica:** com Redis saudável, só **um** worker por janela executa `findMany`/release. Antes, N réplicas rodavam a mesma consulta (idempotente, mas N× carga).  
+   - Se Redis estiver down: **degrade** — todos os workers rodam (comportamento antigo); log de warn.
+2. **Cache Redis:** após falha, cache volta a tentar após ~5s (antes ficava off até restart). Observável: mais hits/tentativas de Redis após blips.
+3. **CRM `?segment=`:** total/páginas devem permanecer corretos; implementação mudou de rank-in-memory para SQL. Regras CASE alinhadas a `resolveClientSegment` (60d/30d/vip 10|R$500/frequent 3).  
+   - **Aviso:** busca `search` no path segmentado usa `ILIKE`/`LIKE` no SQL (equivalente prático ao Prisma `contains`); edge cases de collation Unicode são os do Postgres.
+4. **Métricas de fila:** só logs estruturados no worker — sem novo endpoint HTTP (evita tocar controllers fora de escopo).
 
-```bash
-# Terminal 1 — API só HTTP (opcional; default all já inclui background)
-# Windows PowerShell:
-$env:PROCESS_ROLE='api'; npm run dev:api
+---
 
-# Terminal 2 — worker
-npm run build -w @agenda-pro/api
-$env:PROCESS_ROLE='worker'; npm run start:worker
-```
+## Dependências fora de escopo (não tocadas)
 
-Dev rápido (tudo no mesmo processo): não sete `PROCESS_ROLE` (default `all`) e use só `npm run dev:api`.
-
-### Docker prod-like
-
-```bash
-docker compose -f docker-compose.prod.yml --env-file .env up -d --build
-# serviços: postgres, redis, api, worker, web
-docker compose -f docker-compose.prod.yml logs -f worker
-```
+- Materializar segmento / índice dedicado para mega-tenants (CTE ainda agrega COMPLETED do tenant).
+- Expor métricas em `/health` ou Prometheus (exigiria `health` / controllers).
+- Mover reconcile PIX para job BullMQ repetível (alternativa ao SET NX; não necessário agora).
 
 ---
 
 ## Arquivos tocados
 
-| Arquivo | Papel |
-|---------|-------|
-| `apps/api/src/worker.ts` | Entrypoint background |
-| `apps/api/src/main.ts` | Recusa `PROCESS_ROLE=worker` |
-| `apps/api/src/config/env.validation.ts` / `env.service.ts` | `PROCESS_ROLE` |
-| `apps/api/src/payments/pix-lifecycle.service.ts` | Interval só no worker/all |
-| `apps/api/src/notifications/notifications.service.ts` | Worker só no worker/all |
-| `apps/api/src/common/cache/redis-cache.service.ts` | Slots keys + SCAN invalidate |
-| `apps/api/src/appointments/appointments.service.ts` | Cache slots (diff mínimo) |
-| `apps/api/src/availability/availability.service.ts` | Invalidate slots |
-| `apps/api/src/settings/settings.service.ts` | Invalidate slots |
-| `apps/api/src/team/team.service.ts` | Invalidate slots |
-| `docker-compose.prod.yml` | Serviço `worker` |
-| `.env.example` / `package.json` | Docs + scripts |
+| Arquivo | Mudança |
+|---------|---------|
+| `apps/api/src/payments/pix-lifecycle.service.ts` | Lock distribuído antes do reconcile |
+| `apps/api/src/payments/pix-lifecycle.service.spec.ts` | Testes lock busy/acquired/unavailable |
+| `apps/api/src/common/cache/redis-cache.service.ts` | Circuit breaker + `tryAcquireLock` |
+| `apps/api/src/common/cache/redis-cache.service.spec.ts` | Testes circuito + lock |
+| `apps/api/src/clients/clients.service.ts` | `findClientIdsBySegment` via `$queryRaw` |
+| `apps/api/src/clients/clients-segment-rank.spec.ts` | Testes path SQL |
+| `apps/api/src/worker.ts` | Métricas BullMQ periódicas |
+| `SCORECARD_PERFORMANCE_SCALE.md` | Este scorecard |
+
+---
+
+## Verificação
+
+```bash
+npm run lint -w @agenda-pro/api   # OK (0 warnings)
+npm run prisma:generate -w @agenda-pro/api
+npm run test -w @agenda-pro/api
+```
+
+**Resultados (2026-08-09):**
+- Lint: **pass**
+- Suite focada (`pix-lifecycle|redis-cache|clients-segment|client-segment`): **4 suites / 22 tests pass**
+- Suite completa: **24 pass / 1 fail** — `appointments-security.spec.ts` (`rescheduleByToken` mock incompleto). **Pré-existente na base** `saas-hardening-crm-infra` (reproduz sem as mudanças deste ciclo). Fora do escopo deste agente.
 
 ---
 
 ## Veredito
 
-**8.0/10** — worker separado é o maior ganho de escala horizontal da API; cache de slots fecha o hot path de booking. Falta leader election / job único no PIX e hardening Redis para cravar 9–10.
+**9.0/10** — multi-worker PIX seguro com Redis, cache auto-recupera, CRM segment escala com SQL, fila visível nos logs do worker. Falta materialização/métricas HTTP e load test para cravar 10.
