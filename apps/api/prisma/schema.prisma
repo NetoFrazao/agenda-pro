@@ -341,7 +341,7 @@ model Appointment {
   /// CRM metrics: groupBy clientId + status (page-scoped / segment rank)
   @@index([tenantId, clientId, status, startsAt])
   /// Unique parcial ativos: migration `20260809270000_phase1_appointments_active_unique`
-  /// EXCLUDE GiST overlap: `20260810010000_architecture_integrity` (complementa lock da app).
+  /// EXCLUDE GiST overlap: `20260810010000_architecture_integrity` via coluna `slotRange` + trigger (complementa lock da app).
   /// CHECKs endsAt > startsAt / price/duration: mesma migration.
   @@map("appointments")
 }

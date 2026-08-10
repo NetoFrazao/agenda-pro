@@ -193,7 +193,40 @@ END $$;
 -- 5) EXCLUDE GiST — rede de segurança contra overlap de ativos
 -- (bufferMinutes continua só na app; este CHECK cobre startsAt/endsAt crus)
 -- Falha se já existirem overlaps ativos — nesse caso, limpar antes do deploy.
+--
+-- tstzrange(timestamptz,...) é STABLE no Postgres: não pode ir em expression
+-- index/EXCLUDE nem em GENERATED (42P17 / "not immutable"). Wrapper SQL/plpgsql
+-- IMMUTABLE também falha (SQL é inlined; plpgsql ainda rejeitado no índice).
+-- Solução: coluna física tstzrange mantida por trigger + EXCLUDE na coluna.
+-- Migration só rolled-back local — editamos o mesmo arquivo.
 -- ---------------------------------------------------------------------------
+ALTER TABLE "appointments"
+  ADD COLUMN IF NOT EXISTS "slotRange" tstzrange;
+
+UPDATE "appointments"
+SET "slotRange" = tstzrange("startsAt", "endsAt", '[)')
+WHERE "slotRange" IS NULL;
+
+ALTER TABLE "appointments"
+  ALTER COLUMN "slotRange" SET NOT NULL;
+
+CREATE OR REPLACE FUNCTION appointments_set_slot_range()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  NEW."slotRange" := tstzrange(NEW."startsAt", NEW."endsAt", '[)');
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS appointments_set_slot_range_trg ON "appointments";
+CREATE TRIGGER appointments_set_slot_range_trg
+  BEFORE INSERT OR UPDATE OF "startsAt", "endsAt"
+  ON "appointments"
+  FOR EACH ROW
+  EXECUTE FUNCTION appointments_set_slot_range();
+
 DO $$
 BEGIN
   IF NOT EXISTS (
@@ -203,7 +236,7 @@ BEGIN
       ADD CONSTRAINT "appointments_no_overlap_active"
       EXCLUDE USING gist (
         "professionalId" WITH =,
-        tstzrange("startsAt", "endsAt", '[)') WITH &&
+        "slotRange" WITH &&
       )
       WHERE (status IN ('PENDING_PAYMENT', 'SCHEDULED', 'CONFIRMED'));
   END IF;
