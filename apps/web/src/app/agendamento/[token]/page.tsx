@@ -2,21 +2,23 @@
 
 import { FormEvent, useCallback, useEffect, useState, type KeyboardEvent } from 'react';
 import { useParams } from 'next/navigation';
-import { BrandLogo } from '@/components/BrandLogo';
-import { PixBlock } from '@/components/pix';
-import { SlotListbox } from '@/components/SlotListbox';
 import {
   Alert,
+  BrandLogo,
   Button,
   EmptyState,
   Field,
   Input,
   Modal,
-  Spinner,
+  PixBlock,
+  Skeleton,
+  SlotListbox,
   Stars,
   StatusBadge,
   Textarea,
-} from '@/components/ui';
+  useToast,
+} from '@/components';
+import { Calendar, CheckCircle2, Clock, MapPin, Star, User } from '@/components/icons';
 import { api, ApiError } from '@/lib/api';
 import { formatBRL, formatDate, formatDateTime, formatTime, todayYmd } from '@/lib/format';
 import type { ManagedAppointment, PublicSlotsResponse } from '@/lib/types';
@@ -64,7 +66,7 @@ function StarPicker({ value, onChange }: { value: number; onChange: (v: number) 
   }
 
   return (
-    <div role="radiogroup" aria-label="Nota de 1 a 5 estrelas" className="flex gap-1">
+    <div role="radiogroup" aria-label="Nota de 1 a 5 estrelas" className="flex flex-wrap gap-1">
       {STAR_VALUES.map((n) => (
         <button
           key={n}
@@ -76,11 +78,46 @@ function StarPicker({ value, onChange }: { value: number; onChange: (v: number) 
           tabIndex={n === active ? 0 : -1}
           onClick={() => onChange(n)}
           onKeyDown={(e) => onKeyDown(e, n)}
-          className={`text-3xl transition ${n <= value ? 'text-amber-500' : 'text-line hover:text-amber-400'}`}
+          className={`touch-target inline-flex items-center justify-center rounded-xl transition ${
+            n <= value ? 'text-brass' : 'text-line hover:text-brass/70'
+          }`}
         >
-          ★
+          <Star
+            className="size-8"
+            aria-hidden
+            fill={n <= value ? 'currentColor' : 'none'}
+            strokeWidth={1.75}
+          />
         </button>
       ))}
+    </div>
+  );
+}
+
+function ManageLoadingSkeleton() {
+  return (
+    <div className="flex min-h-screen flex-col bg-atmosphere">
+      <header className="border-b border-line/60 px-4 py-6 sm:px-6">
+        <div className="mx-auto max-w-2xl space-y-3">
+          <Skeleton className="h-8 w-48" />
+          <Skeleton className="h-4 w-36" />
+        </div>
+      </header>
+      <main className="mx-auto w-full max-w-2xl flex-1 space-y-4 px-4 py-8 sm:px-6">
+        <Skeleton className="h-48 w-full rounded-2xl" />
+        <Skeleton className="h-32 w-full rounded-2xl" />
+      </main>
+    </div>
+  );
+}
+
+function SlotsSkeleton() {
+  return (
+    <div className="grid grid-cols-3 gap-2 sm:grid-cols-4" role="status" aria-label="Carregando horários">
+      {Array.from({ length: 6 }).map((_, i) => (
+        <Skeleton key={i} className="h-11 w-full rounded-xl" />
+      ))}
+      <span className="sr-only">Buscando horários…</span>
     </div>
   );
 }
@@ -88,27 +125,23 @@ function StarPicker({ value, onChange }: { value: number; onChange: (v: number) 
 export default function ManageAppointmentPage() {
   const params = useParams<{ token: string }>();
   const token = params.token;
+  const toast = useToast();
 
   const [data, setData] = useState<ManagedAppointment | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  const [actionError, setActionError] = useState<string | null>(null);
-  const [actionSuccess, setActionSuccess] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
 
-  // Cancelamento
   const [cancelOpen, setCancelOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
 
-  // Remarcação
   const [rescheduleOpen, setRescheduleOpen] = useState(false);
   const [newDate, setNewDate] = useState(todayYmd());
   const [slots, setSlots] = useState<string[]>([]);
   const [slotsLoading, setSlotsLoading] = useState(false);
   const [newSlot, setNewSlot] = useState<string | null>(null);
 
-  // Avaliação
   const [rating, setRating] = useState(0);
   const [comment, setComment] = useState('');
 
@@ -122,10 +155,10 @@ export default function ManageAppointmentPage() {
     } catch (err) {
       setLoadError(
         err instanceof ApiError && err.status === 404
-          ? 'Agendamento não encontrado. Confira o link recebido.'
+          ? 'Não encontramos esse agendamento. Confira o link que você recebeu.'
           : err instanceof ApiError
             ? err.message
-            : 'Não foi possível carregar o agendamento.',
+            : 'Não foi possível carregar seu horário.',
       );
     } finally {
       setLoading(false);
@@ -144,11 +177,11 @@ export default function ManageAppointmentPage() {
       setSlotsLoading(true);
       setNewSlot(null);
       try {
-        const res = await api<PublicSlotsResponse>(
+        const res = await api<string[] | PublicSlotsResponse>(
           `/api/public/${data.tenant.slug}/slots?serviceId=${encodeURIComponent(data.service.id)}&date=${encodeURIComponent(date)}&professionalId=${encodeURIComponent(data.professional.id)}`,
           { auth: false },
         );
-        setSlots(res.slots || []);
+        setSlots(Array.isArray(res) ? res : res.slots || []);
       } catch {
         setSlots([]);
       } finally {
@@ -164,18 +197,19 @@ export default function ManageAppointmentPage() {
 
   async function confirmPresence() {
     setBusy('confirm');
-    setActionError(null);
-    setActionSuccess(null);
     try {
       await api(`/api/public/appointments/${token}/confirm`, {
         method: 'POST',
         auth: false,
         body: {},
       });
-      setActionSuccess('Presença confirmada. Até lá!');
+      toast.success('Presença confirmada', 'Te esperamos no horário marcado.');
       await load();
     } catch (err) {
-      setActionError(err instanceof ApiError ? err.message : 'Não foi possível confirmar.');
+      toast.error(
+        'Não deu para confirmar',
+        err instanceof ApiError ? err.message : 'Tente de novo em instantes.',
+      );
     } finally {
       setBusy(null);
     }
@@ -184,20 +218,20 @@ export default function ManageAppointmentPage() {
   async function cancelAppointment(e: FormEvent) {
     e.preventDefault();
     setBusy('cancel');
-    setActionError(null);
-    setActionSuccess(null);
     try {
       await api(`/api/public/appointments/${token}/cancel`, {
         method: 'POST',
         auth: false,
         body: { reason: cancelReason.trim() || undefined },
       });
-      setActionSuccess('Agendamento cancelado.');
+      toast.success('Agendamento cancelado', 'Se mudar de ideia, é só marcar de novo.');
       setCancelOpen(false);
       await load();
     } catch (err) {
-      // 400 = fora do prazo: exibimos a mensagem da API
-      setActionError(err instanceof ApiError ? err.message : 'Não foi possível cancelar.');
+      toast.error(
+        'Não deu para cancelar',
+        err instanceof ApiError ? err.message : 'Fale com o estabelecimento se precisar.',
+      );
     } finally {
       setBusy(null);
     }
@@ -206,23 +240,24 @@ export default function ManageAppointmentPage() {
   async function reschedule() {
     if (!newSlot) return;
     setBusy('reschedule');
-    setActionError(null);
-    setActionSuccess(null);
     try {
       await api(`/api/public/appointments/${token}/reschedule`, {
         method: 'POST',
         auth: false,
         body: { startsAt: newSlot },
       });
-      setActionSuccess('Horário remarcado com sucesso.');
+      toast.success('Horário remarcado', 'Seu novo horário já está guardado.');
       setRescheduleOpen(false);
       await load();
     } catch (err) {
       if (err instanceof ApiError && err.status === 409) {
-        setActionError('Esse horário acabou de ficar indisponível. Escolha outro.');
+        toast.error('Horário ocupado', 'Esse horário acabou de ficar indisponível. Escolha outro.');
         await loadSlots(newDate);
       } else {
-        setActionError(err instanceof ApiError ? err.message : 'Não foi possível remarcar.');
+        toast.error(
+          'Não deu para remarcar',
+          err instanceof ApiError ? err.message : 'Tente outro horário.',
+        );
       }
     } finally {
       setBusy(null);
@@ -232,23 +267,22 @@ export default function ManageAppointmentPage() {
   async function submitReview(e: FormEvent) {
     e.preventDefault();
     if (rating < 1) {
-      setActionError('Escolha uma nota de 1 a 5 estrelas.');
+      toast.error('Falta a nota', 'Escolha de 1 a 5 estrelas.');
       return;
     }
     setBusy('review');
-    setActionError(null);
-    setActionSuccess(null);
     try {
       await api(`/api/public/appointments/${token}/review`, {
         method: 'POST',
         auth: false,
         body: { rating, comment: comment.trim() || undefined },
       });
-      setActionSuccess('Avaliação enviada. Obrigado!');
+      toast.success('Obrigado pelo feedback!', 'Sua avaliação ajuda outros clientes.');
       await load();
     } catch (err) {
-      setActionError(
-        err instanceof ApiError ? err.message : 'Não foi possível enviar a avaliação.',
+      toast.error(
+        'Não deu para enviar',
+        err instanceof ApiError ? err.message : 'Tente novamente.',
       );
     } finally {
       setBusy(null);
@@ -256,20 +290,16 @@ export default function ManageAppointmentPage() {
   }
 
   if (loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-atmosphere p-6">
-        <Spinner label="Carregando agendamento…" />
-      </div>
-    );
+    return <ManageLoadingSkeleton />;
   }
 
   if (!data) {
     return (
       <div className="flex min-h-screen flex-col bg-atmosphere">
-        <div className="px-6 py-6">
+        <div className="px-4 py-6 sm:px-6">
           <BrandLogo />
         </div>
-        <main className="mx-auto w-full max-w-lg px-6 py-16">
+        <main className="mx-auto w-full max-w-lg px-4 py-16 sm:px-6">
           <Alert>{loadError || 'Agendamento não encontrado.'}</Alert>
         </main>
       </div>
@@ -278,65 +308,84 @@ export default function ManageAppointmentPage() {
 
   const isActive = ACTIVE_STATUSES.includes(data.status);
   const showPix = data.pixCharge !== null && data.pixCharge.status === 'PENDING';
+  const firstName = data.client.name.trim().split(/\s+/)[0] || 'você';
 
   return (
     <div className="flex min-h-screen flex-col bg-atmosphere">
-      <header className="glass-panel border-b border-line/60 px-6 py-6">
+      <header className="border-b border-line/60 bg-gradient-to-b from-paper via-paper to-atmosphere px-4 py-6 sm:px-6">
         <div className="mx-auto flex max-w-2xl items-start justify-between gap-4">
-          <div>
-            <p className="font-display text-2xl font-semibold tracking-tight text-ink sm:text-3xl">
-              {data.tenant.name}
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-mint-deep">Oi, {firstName}</p>
+            <p className="mt-1 font-display text-2xl font-semibold tracking-tight text-ink sm:text-3xl">
+              Seu horário com {data.tenant.name}
             </p>
-            <p className="mt-1 text-sm text-muted">Meu agendamento</p>
+            <p className="mt-1 text-sm text-muted">Confirme, remarque ou cancele por aqui</p>
           </div>
           <BrandLogo href="/" size="sm" className="shrink-0 opacity-60" />
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-2xl flex-1 space-y-5 px-6 py-8">
-        {actionError ? <Alert>{actionError}</Alert> : null}
-        {actionSuccess ? <Alert tone="success">{actionSuccess}</Alert> : null}
-
-        <section aria-label="Detalhes do agendamento" className="surface-elevated rounded-2xl p-6">
+      <main className="mx-auto w-full max-w-2xl flex-1 space-y-5 px-4 py-6 sm:px-6 sm:py-8">
+        <section
+          aria-label="Detalhes do agendamento"
+          className="overflow-hidden rounded-3xl bg-gradient-to-br from-success-bg/70 via-white to-paper p-5 ring-1 ring-line/70 sm:p-6"
+        >
           <div className="flex flex-wrap items-start justify-between gap-3">
-            <h1 className="font-display text-xl font-semibold text-ink">{data.service.name}</h1>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted">Serviço</p>
+              <h1 className="mt-1 font-display text-xl font-semibold text-ink sm:text-2xl">
+                {data.service.name}
+              </h1>
+            </div>
             <StatusBadge status={data.status} />
           </div>
-          <dl className="mt-5 space-y-4 text-sm">
-            <div>
-              <dt className="text-xs font-semibold uppercase tracking-wide text-muted">
-                Quando
-              </dt>
-              <dd className="mt-1 font-medium text-ink">
-                {formatDate(data.startsAt, timezone)} às {formatTime(data.startsAt, timezone)}
-              </dd>
+
+          <dl className="mt-6 grid gap-4 text-sm sm:grid-cols-2">
+            <div className="flex gap-3">
+              <span className="mt-0.5 inline-flex size-10 shrink-0 items-center justify-center rounded-xl bg-white ring-1 ring-line">
+                <Calendar className="size-5 text-mint-deep" aria-hidden />
+              </span>
+              <div>
+                <dt className="text-xs font-semibold uppercase tracking-wide text-muted">Quando</dt>
+                <dd className="mt-1 font-medium text-ink">
+                  {formatDate(data.startsAt, timezone)}
+                </dd>
+                <dd className="text-muted">às {formatTime(data.startsAt, timezone)}</dd>
+              </div>
             </div>
-            <div>
-              <dt className="text-xs font-semibold uppercase tracking-wide text-muted">
-                Profissional
-              </dt>
-              <dd className="mt-1 font-medium text-ink">{data.professional.name}</dd>
-            </div>
-            <div>
-              <dt className="text-xs font-semibold uppercase tracking-wide text-muted">
-                Cliente
-              </dt>
-              <dd className="mt-1 font-medium text-ink">{data.client.name}</dd>
-            </div>
-            <div>
-              <dt className="text-xs font-semibold uppercase tracking-wide text-muted">
-                Valor
-              </dt>
-              <dd className="mt-1 font-display text-lg font-semibold text-mint-deep">
-                {formatBRL(data.priceCentsSnapshot)}
-              </dd>
-            </div>
-            {data.tenant.address ? (
+            <div className="flex gap-3">
+              <span className="mt-0.5 inline-flex size-10 shrink-0 items-center justify-center rounded-xl bg-white ring-1 ring-line">
+                <User className="size-5 text-mint-deep" aria-hidden />
+              </span>
               <div>
                 <dt className="text-xs font-semibold uppercase tracking-wide text-muted">
-                  Endereço
+                  Profissional
                 </dt>
-                <dd className="mt-1 font-medium text-ink">{data.tenant.address}</dd>
+                <dd className="mt-1 font-medium text-ink">{data.professional.name}</dd>
+              </div>
+            </div>
+            <div className="flex gap-3">
+              <span className="mt-0.5 inline-flex size-10 shrink-0 items-center justify-center rounded-xl bg-white ring-1 ring-line">
+                <Clock className="size-5 text-mint-deep" aria-hidden />
+              </span>
+              <div>
+                <dt className="text-xs font-semibold uppercase tracking-wide text-muted">Valor</dt>
+                <dd className="mt-1 font-display text-lg font-semibold text-mint-deep">
+                  {formatBRL(data.priceCentsSnapshot)}
+                </dd>
+              </div>
+            </div>
+            {data.tenant.address ? (
+              <div className="flex gap-3">
+                <span className="mt-0.5 inline-flex size-10 shrink-0 items-center justify-center rounded-xl bg-white ring-1 ring-line">
+                  <MapPin className="size-5 text-mint-deep" aria-hidden />
+                </span>
+                <div>
+                  <dt className="text-xs font-semibold uppercase tracking-wide text-muted">
+                    Endereço
+                  </dt>
+                  <dd className="mt-1 font-medium text-ink">{data.tenant.address}</dd>
+                </div>
               </div>
             ) : null}
           </dl>
@@ -349,16 +398,19 @@ export default function ManageAppointmentPage() {
             qrCodeBase64={data.pixCharge.qrCodeBase64}
             expiresAt={data.pixCharge.expiresAt}
             timezone={timezone}
-            note="Seu horário só é confirmado após o pagamento do sinal."
+            note="Seu horário só fica confirmado depois do pagamento do sinal."
           />
         ) : null}
 
         {isActive ? (
-          <section aria-label="Ações" className="surface-elevated rounded-2xl p-6">
+          <section
+            aria-label="Ações"
+            className="surface-elevated rounded-2xl p-5 sm:p-6"
+          >
             <h2 className="font-display text-lg font-semibold text-ink">Precisa mudar algo?</h2>
             {data.canCancel ? (
               <p className="mt-2 text-sm text-muted">
-                Cancelamento e remarcação gratuitos até{' '}
+                Cancelamento e remarcação sem custo até{' '}
                 <strong className="text-ink">
                   {formatDateTime(data.canCancelUntil, timezone)}
                 </strong>
@@ -366,19 +418,22 @@ export default function ManageAppointmentPage() {
               </p>
             ) : (
               <p className="mt-2 text-sm text-muted">
-                O prazo para cancelar ou remarcar online já passou ({data.tenant.cancelMinHours}h
-                antes do horário). Fale direto com o estabelecimento.
+                O prazo online para cancelar ou remarcar já passou ({data.tenant.cancelMinHours}h
+                antes). Fale direto com {data.tenant.name}.
               </p>
             )}
 
-            <div className="mt-5 flex flex-wrap gap-2">
+            <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
               {data.status === 'SCHEDULED' ? (
                 <Button
                   type="button"
                   disabled={busy !== null}
+                  loading={busy === 'confirm'}
                   onClick={() => void confirmPresence()}
+                  className="sm:min-w-[11rem]"
                 >
-                  {busy === 'confirm' ? 'Confirmando…' : 'Confirmar presença'}
+                  <CheckCircle2 className="size-4" aria-hidden />
+                  Confirmar presença
                 </Button>
               ) : null}
               {data.canCancel ? (
@@ -403,7 +458,7 @@ export default function ManageAppointmentPage() {
                       setRescheduleOpen(false);
                     }}
                   >
-                    Cancelar agendamento
+                    Cancelar
                   </Button>
                 </>
               ) : null}
@@ -412,6 +467,9 @@ export default function ManageAppointmentPage() {
             {cancelOpen ? (
               <Modal title="Cancelar agendamento" onClose={() => setCancelOpen(false)}>
                 <form onSubmit={cancelAppointment} className="space-y-4">
+                  <p className="text-sm text-muted">
+                    Tudo bem mudar de planos. Se quiser, conte o motivo — ajuda o estabelecimento.
+                  </p>
                   <Field label="Motivo (opcional)" id="cancel-reason">
                     <Textarea
                       id="cancel-reason"
@@ -421,11 +479,11 @@ export default function ManageAppointmentPage() {
                     />
                   </Field>
                   <div className="flex flex-wrap gap-2">
-                    <Button type="submit" variant="danger" disabled={busy !== null}>
-                      {busy === 'cancel' ? 'Cancelando…' : 'Confirmar cancelamento'}
+                    <Button type="submit" variant="danger" disabled={busy !== null} loading={busy === 'cancel'}>
+                      Confirmar cancelamento
                     </Button>
                     <Button type="button" variant="ghost" onClick={() => setCancelOpen(false)}>
-                      Voltar
+                      Manter horário
                     </Button>
                   </div>
                 </form>
@@ -433,8 +491,9 @@ export default function ManageAppointmentPage() {
             ) : null}
 
             {rescheduleOpen ? (
-              <Modal title="Remarcar horário" onClose={() => setRescheduleOpen(false)}>
+              <Modal title="Escolher novo horário" onClose={() => setRescheduleOpen(false)}>
                 <div className="space-y-4">
+                  <p className="text-sm text-muted">Selecione um dia e um horário livre.</p>
                   <div className="max-w-xs">
                     <Field label="Nova data" id="new-date">
                       <Input
@@ -447,9 +506,11 @@ export default function ManageAppointmentPage() {
                     </Field>
                   </div>
                   {slotsLoading ? (
-                    <Spinner label="Buscando horários…" />
+                    <SlotsSkeleton />
                   ) : slots.length === 0 ? (
-                    <EmptyState>Nenhum horário livre neste dia. Tente outra data.</EmptyState>
+                    <EmptyState title="Nenhum horário nesse dia">
+                      Tente outra data — a agenda pode estar cheia.
+                    </EmptyState>
                   ) : (
                     <SlotListbox
                       slots={slots}
@@ -464,9 +525,10 @@ export default function ManageAppointmentPage() {
                     <Button
                       type="button"
                       disabled={!newSlot || busy !== null}
+                      loading={busy === 'reschedule'}
                       onClick={() => void reschedule()}
                     >
-                      {busy === 'reschedule' ? 'Remarcando…' : 'Confirmar novo horário'}
+                      Confirmar novo horário
                     </Button>
                     <Button type="button" variant="ghost" onClick={() => setRescheduleOpen(false)}>
                       Voltar
@@ -479,7 +541,7 @@ export default function ManageAppointmentPage() {
         ) : null}
 
         {data.review ? (
-          <section aria-label="Sua avaliação" className="surface-elevated rounded-2xl p-6">
+          <section aria-label="Sua avaliação" className="surface-elevated rounded-2xl p-5 sm:p-6">
             <h2 className="font-display text-lg font-semibold text-ink">Sua avaliação</h2>
             <div className="mt-3">
               <Stars value={data.review.rating} size="lg" />
@@ -489,10 +551,11 @@ export default function ManageAppointmentPage() {
             </div>
           </section>
         ) : data.canReview ? (
-          <section aria-label="Avaliar atendimento" className="surface-elevated rounded-2xl p-6">
+          <section aria-label="Avaliar atendimento" className="surface-elevated rounded-2xl p-5 sm:p-6">
             <h2 className="font-display text-lg font-semibold text-ink">
               Como foi seu atendimento?
             </h2>
+            <p className="mt-1 text-sm text-muted">Sua opinião ajuda {data.tenant.name} a melhorar.</p>
             <form onSubmit={submitReview} className="mt-5 space-y-4">
               <StarPicker value={rating} onChange={setRating} />
               <Field label="Comentário (opcional)" id="review-comment">
@@ -501,10 +564,11 @@ export default function ManageAppointmentPage() {
                   value={comment}
                   onChange={(e) => setComment(e.target.value)}
                   maxLength={500}
+                  placeholder="O que mais gostou?"
                 />
               </Field>
-              <Button type="submit" disabled={busy !== null || rating < 1}>
-                {busy === 'review' ? 'Enviando…' : 'Enviar avaliação'}
+              <Button type="submit" disabled={busy !== null || rating < 1} loading={busy === 'review'}>
+                Enviar avaliação
               </Button>
             </form>
           </section>

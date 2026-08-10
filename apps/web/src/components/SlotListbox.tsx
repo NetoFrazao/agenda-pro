@@ -104,7 +104,7 @@ export function SlotListbox({
               aria-selected={selected}
               data-selected={selected}
               tabIndex={index === activeIndex ? 0 : -1}
-              className="slot-chip w-full rounded-xl bg-white px-2 py-2.5 text-sm font-semibold text-ink ring-1 ring-line hover:ring-mint-deep/40 focus-visible:ring-2 focus-visible:ring-mint-deep"
+              className="slot-chip min-h-11 w-full rounded-xl bg-white px-2 py-2.5 text-sm font-semibold text-ink ring-1 ring-line hover:ring-mint-deep/40 focus-visible:ring-2 focus-visible:ring-mint-deep"
               onClick={() => onChange(iso)}
               onKeyDown={(e) => onKeyDown(e, index)}
               onFocus={() => setActiveIndex(index)}
