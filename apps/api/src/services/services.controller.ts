@@ -2,6 +2,7 @@ import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from '@n
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { UserRole } from '@prisma/client';
 import { CurrentUser, AuthUser } from '../common/decorators/current-user.decorator';
+import { CsrfGuard } from '../common/decorators/csrf.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { RolesGuard } from '../common/decorators/roles.guard';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -10,7 +11,7 @@ import { ServicesService } from './services.service';
 
 @ApiTags('services')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, CsrfGuard)
 @Controller('services')
 export class ServicesController {
   constructor(private readonly services: ServicesService) {}

@@ -4,6 +4,7 @@ export type {
   AppointmentStatus,
   PlanCode,
   PixChargeStatus,
+  User,
   UserRole,
   WaitlistEntryStatus,
 } from '@agenda-pro/shared';
@@ -15,15 +16,6 @@ export {
   USER_ROLES,
   WAITLIST_STATUSES,
 } from '@agenda-pro/shared';
-
-export interface User {
-  id: string;
-  name: string;
-  email: string;
-  role?: string;
-  timezone?: string | null;
-  phone?: string | null;
-}
 
 export interface Tenant {
   id: string;

@@ -22,13 +22,14 @@ export class AppointmentsController {
       from: query.from,
       to: query.to,
       professionalId: query.professionalId,
+      activeOnly: query.activeOnly,
       page: query.page,
       pageSize: query.pageSize,
       actor: { userId: user.userId, role: user.role },
     });
   }
 
-  /** Staff (OWNER/MEMBER) pode operar status; FSM + gate PIX bloqueiam furo de sinal. */
+  /** Staff (OWNER/MEMBER) pode operar status; MEMBER só nos próprios; FSM + PIX gate. */
   @Patch(':id/status')
   @Roles(UserRole.OWNER, UserRole.MEMBER)
   updateStatus(
@@ -36,6 +37,9 @@ export class AppointmentsController {
     @Param('id') id: string,
     @Body() dto: UpdateAppointmentStatusDto,
   ) {
-    return this.appointments.updateStatus(user.tenantId, id, dto.status);
+    return this.appointments.updateStatus(user.tenantId, id, dto.status, {
+      userId: user.userId,
+      role: user.role,
+    });
   }
 }

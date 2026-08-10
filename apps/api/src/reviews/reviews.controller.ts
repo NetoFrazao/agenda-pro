@@ -5,6 +5,7 @@ import { IsBoolean } from 'class-validator';
 import { NotFoundException } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AuthUser, CurrentUser } from '../common/decorators/current-user.decorator';
+import { CsrfGuard } from '../common/decorators/csrf.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { RolesGuard } from '../common/decorators/roles.guard';
 import { RedisCacheService } from '../common/cache/redis-cache.service';
@@ -18,7 +19,7 @@ class UpdateReviewDto {
 
 @ApiTags('reviews')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, CsrfGuard)
 @Controller('reviews')
 export class ReviewsController {
   constructor(

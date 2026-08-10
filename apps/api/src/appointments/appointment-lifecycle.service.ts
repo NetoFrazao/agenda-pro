@@ -1,4 +1,9 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { AppointmentStatus, PixChargeStatus, Prisma } from '@prisma/client';
 import { ACTIVE_APPOINTMENT_STATUSES } from '../common/availability/availability.engine';
 import {
@@ -52,6 +57,8 @@ export class AppointmentLifecycleService {
       from?: string;
       to?: string;
       professionalId?: string;
+      /** Exclui CANCELLED e NO_SHOW — total/items só com agendamentos “ativos”. */
+      activeOnly?: boolean;
       page?: number;
       pageSize?: number;
       /** Escopo AuthZ — MEMBER só vê a própria agenda */
@@ -72,6 +79,11 @@ export class AppointmentLifecycleService {
       if (opts.from) where.startsAt.gte = new Date(opts.from);
       if (opts.to) where.startsAt.lte = new Date(opts.to);
     }
+    if (opts.activeOnly) {
+      where.status = {
+        notIn: [AppointmentStatus.CANCELLED, AppointmentStatus.NO_SHOW],
+      };
+    }
 
     const [items, total] = await Promise.all([
       this.prisma.appointment.findMany({
@@ -87,7 +99,12 @@ export class AppointmentLifecycleService {
     return { items, total, page, pageSize };
   }
 
-  async updateStatus(tenantId: string, id: string, status: AppointmentStatus) {
+  async updateStatus(
+    tenantId: string,
+    id: string,
+    status: AppointmentStatus,
+    actor?: { userId: string; role: string },
+  ) {
     const appt = await this.prisma.appointment.findFirst({
       where: { id, tenantId },
       include: {
@@ -97,6 +114,11 @@ export class AppointmentLifecycleService {
       },
     });
     if (!appt) throw new NotFoundException('Agendamento não encontrado');
+
+    // MEMBER só altera status da própria agenda
+    if (actor?.role === 'MEMBER' && appt.professionalId !== actor.userId) {
+      throw new ForbiddenException('Sem permissão para alterar este agendamento');
+    }
 
     // Bloqueia staff de furar sinal PIX (FSM já impede; defesa explícita + mensagem clara)
     if (

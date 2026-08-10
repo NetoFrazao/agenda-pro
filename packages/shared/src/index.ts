@@ -8,6 +8,8 @@ export type {
   WaitlistStatus,
 } from './enums';
 
+export type { User } from './user';
+
 export {
   APPOINTMENT_STATUSES,
   PIX_CHARGE_STATUSES,

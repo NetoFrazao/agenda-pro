@@ -3,6 +3,7 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { UserRole } from '@prisma/client';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AuthUser, CurrentUser } from '../common/decorators/current-user.decorator';
+import { CsrfGuard } from '../common/decorators/csrf.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { RolesGuard } from '../common/decorators/roles.guard';
 import {
@@ -14,7 +15,7 @@ import { SettingsService } from './settings.service';
 
 @ApiTags('settings')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, CsrfGuard)
 @Controller('settings')
 export class SettingsController {
   constructor(private readonly settings: SettingsService) {}
