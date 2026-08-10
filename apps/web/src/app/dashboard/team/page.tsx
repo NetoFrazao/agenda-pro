@@ -145,13 +145,13 @@ export default function TeamPage() {
     }
   }
 
-  if (loading) return <Spinner />;
+  if (loading) return <Spinner label="Carregando equipe…" />;
 
   return (
-    <div>
+    <div className="animate-fade-up">
       <PageTitle
         title="Equipe"
-        description="Profissionais que atendem no seu negócio e suas comissões."
+        description="Quem atende no negócio e a comissão de cada um."
       />
 
       {error ? (
@@ -172,7 +172,16 @@ export default function TeamPage() {
       </div>
 
       {members.length === 0 ? (
-        <EmptyState>Nenhum profissional cadastrado.</EmptyState>
+        <EmptyState
+          title="Nenhum profissional ainda"
+          action={
+            <Button type="button" variant="secondary" onClick={() => setCreateOpen(true)}>
+              Adicionar o primeiro
+            </Button>
+          }
+        >
+          Cadastre quem atende para aparecer na página pública e receber horários.
+        </EmptyState>
       ) : (
         <ul className="space-y-3">
           {members.map((m) => (
@@ -313,7 +322,7 @@ export default function TeamPage() {
                 <input
                   id="edit-active"
                   type="checkbox"
-                  className="size-4 accent-emerald-700"
+                  className="size-4 accent-mint-deep"
                   checked={editForm.isActive}
                   onChange={(e) =>
                     setEditForm((f) => (f ? { ...f, isActive: e.target.checked } : f))

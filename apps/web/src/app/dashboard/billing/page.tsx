@@ -68,15 +68,15 @@ export default function BillingPage() {
     }
   }
 
-  if (loading) return <Spinner />;
+  if (loading) return <Spinner label="Carregando planos…" />;
 
   const current = me?.tenant?.plan;
 
   return (
-    <div>
+    <div className="animate-fade-up">
       <PageTitle
         title="Planos e cobrança"
-        description="Escolha o plano do seu negócio. Os preços podem vir da API ou de valores de referência."
+        description="Escolha o plano do negócio. Preços vêm da API ou de valores de referência."
       />
       {error ? (
         <div className="mb-4">
@@ -90,11 +90,20 @@ export default function BillingPage() {
       ) : null}
 
       <p className="mb-6 text-sm text-muted">
-        Plano atual: <strong>{current || '—'}</strong>
+        Plano atual: <strong className="text-ink">{current || '—'}</strong>
       </p>
 
       {plans.length === 0 ? (
-        <EmptyState>Nenhum plano disponível no momento.</EmptyState>
+        <EmptyState
+          title="Planos indisponíveis"
+          action={
+            <Button type="button" variant="secondary" onClick={() => window.location.reload()}>
+              Tentar de novo
+            </Button>
+          }
+        >
+          Não foi possível listar os planos agora. Tente novamente em instantes.
+        </EmptyState>
       ) : (
         <ul className="grid gap-4 sm:grid-cols-3">
           {plans.map((plan) => {
@@ -107,7 +116,7 @@ export default function BillingPage() {
               >
                 <h2 className="font-display text-xl font-semibold text-ink">{plan.name}</h2>
                 {price != null ? (
-                  <p className="mt-2 text-2xl font-semibold text-emerald-800">
+                  <p className="mt-2 text-2xl font-semibold text-mint-deep">
                     {formatBRL(price)}
                     <span className="text-sm font-normal text-muted">/mês</span>
                   </p>

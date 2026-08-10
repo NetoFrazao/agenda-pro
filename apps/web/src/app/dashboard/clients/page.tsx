@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/components/AuthProvider';
 import {
@@ -11,6 +12,7 @@ import {
   Input,
   PageTitle,
   Select,
+  SkeletonList,
   Spinner,
   StatusBadge,
   Textarea,
@@ -275,7 +277,7 @@ export default function ClientsPage() {
                   )}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center justify-center rounded-xl bg-mint-deep px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90"
+                  className="inline-flex min-h-11 items-center justify-center rounded-xl bg-mint-deep px-4 py-2 text-sm font-semibold text-white transition hover:bg-mint-hover"
                 >
                   Remarcar no WhatsApp
                 </a>
@@ -436,7 +438,7 @@ export default function ClientsPage() {
                         <li key={tag}>
                           <button
                             type="button"
-                            className="inline-flex items-center gap-1 rounded-md bg-paper-2 px-2 py-0.5 text-[11px] font-semibold tracking-wide text-ink-muted transition hover:bg-orange-100 hover:text-orange-950"
+                            className="inline-flex min-h-9 items-center gap-1 rounded-md bg-paper-2 px-2 py-1 text-[11px] font-semibold tracking-wide text-ink-muted transition hover:bg-warning-bg hover:text-warning-fg"
                             onClick={() => {
                               setTags((prev) => prev.filter((t) => t !== tag));
                               setProfileSaved(false);
@@ -558,7 +560,7 @@ export default function ClientsPage() {
         <Field
           label="Segmento"
           id="client-segment"
-          hint="API filtra após métricas da página atual."
+          hint="Mostra quem encaixa neste segmento nesta página."
         >
           <Select
             id="client-segment"
@@ -604,12 +606,35 @@ export default function ClientsPage() {
       ) : null}
 
       {loading ? (
-        <Spinner label="Carregando clientes…" />
+        <SkeletonList rows={5} />
       ) : !data || data.items.length === 0 ? (
-        <EmptyState title={hasActiveFilters ? 'Nenhum resultado' : 'Nenhum cliente ainda'}>
+        <EmptyState
+          title={hasActiveFilters ? 'Nenhum resultado' : 'Nenhum cliente ainda'}
+          action={
+            hasActiveFilters ? (
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => {
+                  setSearch('');
+                  setDebouncedSearch('');
+                  setSegmentFilter('');
+                  setInactiveFilter('');
+                  setPage(1);
+                }}
+              >
+                Limpar filtros
+              </Button>
+            ) : (
+              <Link href="/dashboard/appointments">
+                <Button variant="secondary">Abrir agenda</Button>
+              </Link>
+            )
+          }
+        >
           {hasActiveFilters
-            ? 'Nenhum cliente nesta página com os filtros atuais. Limpe segmento/inatividade ou busque outro termo.'
-            : 'Eles aparecem aqui após o primeiro agendamento.'}
+            ? 'Ninguém nesta página combina com os filtros. Limpe segmento/inatividade ou busque outro termo.'
+            : 'Clientes entram aqui após o primeiro agendamento — compartilhe seu link público.'}
         </EmptyState>
       ) : (
         <>
@@ -662,7 +687,7 @@ export default function ClientsPage() {
                         </span>
                       ) : null}
                       {c.noShowCount > 0 ? (
-                        <span className="text-orange-700">
+                        <span className="text-warning-fg">
                           <strong>{c.noShowCount}</strong> falta{c.noShowCount > 1 ? 's' : ''}
                         </span>
                       ) : null}

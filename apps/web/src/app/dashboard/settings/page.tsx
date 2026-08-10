@@ -416,7 +416,7 @@ export default function SettingsPage() {
               <input
                 id="ly-enabled"
                 type="checkbox"
-                className="size-4 accent-emerald-700"
+                className="size-4 accent-mint-deep"
                 checked={loyaltyForm.loyaltyEnabled}
                 onChange={(e) =>
                   setLoyaltyForm((f) => (f ? { ...f, loyaltyEnabled: e.target.checked } : f))
@@ -453,9 +453,9 @@ export default function SettingsPage() {
         </section>
       ) : null}
 
-      <section className="rounded-lg border border-red-200 bg-red-50/60 p-5">
-        <h2 className="font-display text-lg font-semibold text-red-900">Excluir conta (LGPD)</h2>
-        <p className="mt-2 max-w-xl text-sm text-red-900/80">
+      <section className="rounded-2xl border border-danger-border bg-danger-bg p-5">
+        <h2 className="font-display text-lg font-semibold text-danger-fg">Excluir conta (LGPD)</h2>
+        <p className="mt-2 max-w-xl text-sm text-danger-fg/90">
           Remove permanentemente sua conta, dados do negócio e informações pessoais tratadas pela
           Agenda Pro. Agendamentos e histórico vinculados serão apagados conforme a política de
           retenção.
