@@ -1,0 +1,23 @@
+# Agenda Pro — reverse proxy TLS (Caddy)
+# Env: TLS_DOMAIN (obrigatório).
+#
+# Default prod-like local: tls internal (cert auto, sem DNS/ACME).
+# Produção pública: troque `tls internal` por ACME — defina CADDY_EMAIL e
+# remova `tls internal` (Caddy usa Let's Encrypt automaticamente), ou:
+#   tls {$CADDY_EMAIL}
+#
+# Path routing: /api/* → api:3001, resto → web:3000.
+
+{$TLS_DOMAIN} {
+	tls internal
+	encode gzip
+
+	@api path /api/*
+	handle @api {
+		reverse_proxy api:3001
+	}
+
+	handle {
+		reverse_proxy web:3000
+	}
+}

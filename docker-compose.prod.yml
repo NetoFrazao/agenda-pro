@@ -3,6 +3,9 @@
 #   1) Preencha .env: JWT_*, POSTGRES_*, REDIS_PASSWORD, CORS/URLs (sem defaults fracos).
 #   2) docker compose -f docker-compose.prod.yml --env-file .env config
 #   3) docker compose -f docker-compose.prod.yml --env-file .env up -d --build
+# TLS (Caddy): ver docker-compose.tls.yml
+#   docker compose -f docker-compose.prod.yml -f docker-compose.tls.yml --env-file .env up -d --build
+# CD: imagens GHCR via API_IMAGE / WEB_IMAGE (scripts/deploy-release.sh)
 # Dev continua em docker-compose.yml (só PG + Redis; apps no host com PROCESS_ROLE=all).
 #
 # REDIS_PASSWORD: obrigatório. Gere URL-safe, ex.: openssl rand -hex 32
@@ -26,6 +29,9 @@ x-api-env: &api-env
   STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
   MERCADOPAGO_ACCESS_TOKEN: ${MERCADOPAGO_ACCESS_TOKEN:-}
   MERCADOPAGO_WEBHOOK_SECRET: ${MERCADOPAGO_WEBHOOK_SECRET:-}
+  # Sentry (SDK no app — ver docs/ops/SENTRY.md). Vazio = no-op.
+  SENTRY_DSN: ${SENTRY_DSN:-}
+  SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-production}
 
 services:
   postgres:
@@ -71,6 +77,7 @@ services:
     networks: [internal]
 
   api:
+    image: ${API_IMAGE:-agenda-pro-api:release}
     build:
       context: .
       dockerfile: apps/api/Dockerfile
@@ -83,6 +90,7 @@ services:
     environment:
       <<: *api-env
       PROCESS_ROLE: api
+    # HTTP direto (dev/staging). Com TLS overlay: ports resetados — só Caddy.
     ports:
       - '${API_PORT:-3001}:3001'
     healthcheck:
@@ -96,6 +104,7 @@ services:
   # BullMQ notifications + reconcile PIX (mesma imagem; sem HTTP).
   # Escala: preferir 1 réplica até haver leader election no reconcile.
   worker:
+    image: ${API_IMAGE:-agenda-pro-api:release}
     build:
       context: .
       dockerfile: apps/api/Dockerfile
@@ -114,6 +123,7 @@ services:
     networks: [internal]
 
   web:
+    image: ${WEB_IMAGE:-agenda-pro-web:release}
     build:
       context: .
       dockerfile: apps/web/Dockerfile

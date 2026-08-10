@@ -2,95 +2,93 @@
 
 ## Objetivo
 
-Backup lógico diário (ou sob demanda) do PostgreSQL via `pg_dump` no container Compose. Redis é cache/fila — não é source of truth (outbox em `notification_jobs`).
+Backup lógico **agendado** do PostgreSQL via `pg_dump` + cópia off-host + alerta em falha + restore drill periódico.
 
 ## RPO / RTO propostos (MVP / beta)
 
 | Métrica | Alvo sugerido | Notas |
 |---------|---------------|--------|
-| RPO | ≤ 24 h | Dump diário; reduzir com dump a cada 6 h se houver tenants pagantes |
+| RPO | ≤ 24 h | Dump diário + `BACKUP_OFFHOST_DIR` |
 | RTO | ≤ 2 h | Restore dump + migrate + smoke health |
 
-Não há PITR (WAL archiving) nesta fase — documentado como próximo passo em `DISASTER-RECOVERY.md`.
-
-## Backup (local / staging)
+## Backup sob demanda
 
 ```powershell
-# Dry-run (não escreve arquivo)
 npm run db:backup:dry
-
-# Backup real → ./backups/agenda-pro-YYYYMMDD-HHmmss.sql
 npm run db:backup
 ```
 
-Linux/macOS:
-
 ```bash
-chmod +x scripts/backup-postgres.sh
+chmod +x scripts/backup-postgres.sh scripts/backup-scheduled.sh
 ./scripts/backup-postgres.sh --dry-run
 ./scripts/backup-postgres.sh
 ```
 
-Compose prod:
+Prod compose: `COMPOSE_FILE=docker-compose.prod.yml ./scripts/backup-postgres.sh`
 
-```powershell
-powershell -File .\scripts\backup-postgres.ps1 -ComposeFile docker-compose.prod.yml
+## Agendamento (cron / Task Scheduler)
+
+### Linux
+
+```bash
+export BACKUP_OFFHOST_DIR=/mnt/offhost/agenda-pro
+export BACKUP_ALERT_WEBHOOK_URL=https://hooks.slack.com/...
+export COMPOSE_FILE=docker-compose.prod.yml
+./scripts/install-backup-cron.sh --dry-run
+./scripts/install-backup-cron.sh   # 03:15 UTC diário → backup-scheduled.sh
+# Opcional no cron env: RUN_RESTORE_DRILL=1
 ```
 
-`backups/` está no `.gitignore`.
+### Windows
 
-## Restore (procedimento)
+```powershell
+$env:BACKUP_OFFHOST_DIR = 'D:\backups-agenda-pro'
+$env:BACKUP_ALERT_WEBHOOK_URL = 'https://hooks.slack.com/...'
+powershell -File .\scripts\install-backup-task.ps1 -DryRun
+powershell -File .\scripts\install-backup-task.ps1 -Time '03:15'
+```
 
-1. Subir Postgres saudável (`docker compose up -d postgres`).
-2. **Dry-run** do script de restore.
-3. Confirmar dump correto (data/tamanho).
-4. Aplicar com confirmação explícita:
+Alerta: webhook se `pg_dump` falhar ou dump &lt; 100 bytes.
+
+## Restore
 
 ```powershell
 powershell -File .\scripts\restore-postgres.ps1 -DumpFile backups\agenda-pro-XXXX.sql -DryRun
 powershell -File .\scripts\restore-postgres.ps1 -DumpFile backups\agenda-pro-XXXX.sql -ConfirmRestore
 ```
 
-5. `npm run db:migrate` se o dump for mais antigo que as migrations atuais.
-6. Smoke: `GET /api/health` e `GET /api/health/ready`.
-
-## Checklist pós-backup
-
-- [ ] Arquivo não-vazio
-- [ ] Cópia off-host (`BACKUP_OFFHOST_DIR` ou `-OffHostDir`) — **obrigatório para RPO contratado**
-- [ ] Restore drill: `npm run db:restore:drill -- -DumpFile backups\...` (ou `-Apply` em DB descartável)
-- [ ] Smoke `/api/health` + `/api/health/ready` após restore real
-
-### Off-host
-
-```powershell
-$env:BACKUP_OFFHOST_DIR = 'D:\backups-agenda-pro'  # ou mount S3/rclone
-npm run db:backup
+```bash
+./scripts/restore-postgres.sh --dump-file backups/agenda-pro-XXXX.sql --dry-run
+./scripts/restore-postgres.sh --dump-file backups/agenda-pro-XXXX.sql --confirm
 ```
 
-Agendar no Windows Task Scheduler (diário) apontando para `scripts/backup-postgres.ps1`.
+## Restore drill
 
-### Restore drill
+Local:
 
 ```powershell
 npm run db:restore:drill -- -DumpFile backups\agenda-pro-XXXX.sql
-# Em staging descartável:
-powershell -File .\scripts\restore-drill.ps1 -DumpFile backups\agenda-pro-XXXX.sql -Apply
 ```
+
+```bash
+./scripts/restore-drill.sh --dump-file backups/agenda-pro-XXXX.sql
+```
+
+CI periódico: `.github/workflows/restore-drill.yml` (segundas 04:30 UTC) aplica fixture `ops/fixtures/restore-drill-smoke.sql` em Postgres efêmero e publica artefato.
 
 ## Monitoramento de readiness
 
 ```powershell
-$env:HEALTH_READY_URL = 'https://api.seudominio.com/api/health/ready'
+$env:HEALTH_READY_URL = 'https://app.seudominio.com/api/health/ready'
 $env:HEALTH_ALERT_WEBHOOK_URL = 'https://hooks.slack.com/services/...'
 npm run ops:watch-ready
 ```
 
-Agendar a cada 1–5 min. Alternativa: UptimeRobot/Better Stack HTTP 200 em `/api/health/ready`.
+GitHub Actions: `health-probe.yml` (a cada 15 min) — configure `HEALTH_READY_URL` + `HEALTH_ALERT_WEBHOOK_URL`.
 
 ## O que não está coberto
 
-- PITR / WAL archiving (ver `DISASTER-RECOVERY.md`)
-- Criptografia at-rest do dump (cifrar antes de upload cloud)
-- Redis AOF/RDB (fila reconstruível via outbox)
-- Upload S3 nativo (use `BACKUP_OFFHOST_DIR` + sync externo)
+- PITR / WAL archiving (`DISASTER-RECOVERY.md`)
+- Criptografia at-rest nativa do dump (cifrar antes do sync cloud)
+- Redis AOF como SoT (fila reconstruível via outbox)
+- Upload S3 SDK (use `BACKUP_OFFHOST_DIR` + rclone/sync)

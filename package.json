@@ -31,7 +31,10 @@
     "db:backup": "powershell -ExecutionPolicy Bypass -File ./scripts/backup-postgres.ps1",
     "db:backup:dry": "powershell -ExecutionPolicy Bypass -File ./scripts/backup-postgres.ps1 -DryRun",
     "db:restore:drill": "powershell -ExecutionPolicy Bypass -File ./scripts/restore-drill.ps1",
-    "ops:watch-ready": "powershell -ExecutionPolicy Bypass -File ./scripts/watch-ready.ps1"
+    "ops:watch-ready": "powershell -ExecutionPolicy Bypass -File ./scripts/watch-ready.ps1",
+    "ops:audit": "node scripts/npm-audit-check.mjs",
+    "docker:prod:tls:up": "docker compose -f docker-compose.prod.yml -f docker-compose.tls.yml --env-file .env up -d --build",
+    "docker:prod:tls:config": "docker compose -f docker-compose.prod.yml -f docker-compose.tls.yml --env-file .env config"
   },
   "engines": {
     "node": ">=20"
