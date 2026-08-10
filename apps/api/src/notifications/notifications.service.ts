@@ -155,6 +155,7 @@ export class NotificationsService implements OnModuleDestroy {
               message: reminderText,
               waLink: this.buildWaLink(appointment.client.phone, reminderText),
               appointmentId: appointment.id,
+              startsAtIso: appointment.startsAt.toISOString(),
             },
           },
           delayMs,
@@ -174,6 +175,7 @@ export class NotificationsService implements OnModuleDestroy {
               subject: `Lembrete: ${appointment.service.name} em ${when} — ${appointment.tenant.name}`,
               text: reminderText,
               appointmentId: appointment.id,
+              startsAtIso: appointment.startsAt.toISOString(),
             },
           },
           delayMs,
@@ -285,15 +287,16 @@ export class NotificationsService implements OnModuleDestroy {
   }
 
   /**
-   * Marca jobs PENDING do agendamento como FAILED (não enviados).
-   * Usado no reschedule para não disparar lembretes do horário antigo.
-   * Jobs já em PROCESSING podem ainda completar (race aceitável).
+   * Invalida jobs ainda não enviados do agendamento (PENDING + PROCESSING).
+   * O worker revalida no momento do envio — cobre a race em que o job já foi claimado.
    */
   async cancelPendingForAppointment(appointmentId: string): Promise<number> {
     const result = await this.prisma.notificationJob.updateMany({
       where: {
         appointmentId,
-        status: NotificationJobStatus.PENDING,
+        status: {
+          in: [NotificationJobStatus.PENDING, NotificationJobStatus.PROCESSING],
+        },
       },
       data: {
         status: NotificationJobStatus.FAILED,
@@ -302,6 +305,31 @@ export class NotificationsService implements OnModuleDestroy {
       },
     });
     return result.count;
+  }
+
+  /**
+   * Verificação no momento do envio: status do appointment + startsAt do payload.
+   * Retorna false se o lembrete não deve mais sair (cancelado/remarcado).
+   */
+  async isBookingReminderStillValid(
+    appointmentId: string,
+    payload: Record<string, unknown>,
+  ): Promise<boolean> {
+    const appt = await this.prisma.appointment.findUnique({
+      where: { id: appointmentId },
+      select: { status: true, startsAt: true },
+    });
+    if (!appt) return false;
+    if (appt.status === 'CANCELLED' || appt.status === 'NO_SHOW') return false;
+
+    const startsAtIso = payload.startsAtIso;
+    if (typeof startsAtIso === 'string' && startsAtIso.length > 0) {
+      const expected = new Date(startsAtIso).getTime();
+      if (Number.isFinite(expected) && expected !== appt.startsAt.getTime()) {
+        return false;
+      }
+    }
+    return true;
   }
 
   private async createAndEnqueue(
@@ -353,16 +381,20 @@ export class NotificationsService implements OnModuleDestroy {
     if (!record || record.status === NotificationJobStatus.COMPLETED) return;
     if (record.status === NotificationJobStatus.FAILED) return;
 
-    // Lembrete de agendamento que já foi cancelado não deve ser enviado
+    // Pré-check (antes de claim): cancelado / remarcado
     if (record.appointmentId && record.type === NotificationJobType.BOOKING_REMINDER) {
-      const appt = await this.prisma.appointment.findUnique({
-        where: { id: record.appointmentId },
-        select: { status: true },
-      });
-      if (appt && (appt.status === 'CANCELLED' || appt.status === 'NO_SHOW')) {
+      const stillValid = await this.isBookingReminderStillValid(
+        record.appointmentId,
+        record.payload as Record<string, unknown>,
+      );
+      if (!stillValid) {
         await this.prisma.notificationJob.update({
           where: { id: record.id },
-          data: { status: NotificationJobStatus.COMPLETED, processedAt: new Date() },
+          data: {
+            status: NotificationJobStatus.FAILED,
+            lastError: 'Invalidated at send-time: appointment cancelled or rescheduled',
+            processedAt: new Date(),
+          },
         });
         return;
       }
@@ -374,11 +406,33 @@ export class NotificationsService implements OnModuleDestroy {
     });
 
     try {
-      const payload = record.payload as Record<string, unknown>;
+      // Revalidação no momento do envio (race: cancel/reschedule após claim)
+      const latest = await this.prisma.notificationJob.findUnique({
+        where: { id: record.id },
+      });
+      if (!latest || latest.status === NotificationJobStatus.FAILED) {
+        return;
+      }
 
-      if (record.channel === NotificationChannel.EMAIL) {
+      const payload = latest.payload as Record<string, unknown>;
+      if (latest.appointmentId && latest.type === NotificationJobType.BOOKING_REMINDER) {
+        const stillValid = await this.isBookingReminderStillValid(latest.appointmentId, payload);
+        if (!stillValid) {
+          await this.prisma.notificationJob.update({
+            where: { id: latest.id },
+            data: {
+              status: NotificationJobStatus.FAILED,
+              lastError: 'Invalidated at send-time: appointment cancelled or rescheduled',
+              processedAt: new Date(),
+            },
+          });
+          return;
+        }
+      }
+
+      if (latest.channel === NotificationChannel.EMAIL) {
         await this.sendEmail(payload);
-      } else if (record.channel === NotificationChannel.WHATSAPP) {
+      } else if (latest.channel === NotificationChannel.WHATSAPP) {
         const sent = await this.whatsapp.sendText(
           String(payload.phone ?? ''),
           String(payload.message ?? ''),

@@ -20,6 +20,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AuthUser, CurrentUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { RolesGuard } from '../common/decorators/roles.guard';
+import { CsrfGuard } from '../common/decorators/csrf.guard';
 import type { ClientSegment, InactiveBucket } from './client-segment';
 import { ClientsService } from './clients.service';
 
@@ -104,7 +105,7 @@ class UpdateClientProfileDto {
 
 @ApiTags('clients')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, CsrfGuard)
 @Controller('clients')
 export class ClientsController {
   constructor(private readonly clients: ClientsService) {}
@@ -114,12 +115,15 @@ export class ClientsController {
     return this.clients.list(user.tenantId, query.search, query.page, query.pageSize, {
       segment: query.segment,
       inactiveDays: query.inactiveDays,
+      actor: { userId: user.userId, role: user.role },
     });
   }
 
   @Get(':id')
   detail(@CurrentUser() user: AuthUser, @Param('id') id: string) {
-    return this.clients.detail(user.tenantId, id);
+    return this.clients.detail(user.tenantId, id, {
+      actor: { userId: user.userId, role: user.role },
+    });
   }
 
   /** CRM writes (notas / LGPD consent / perfil) — só OWNER */

@@ -22,21 +22,30 @@ export class ClientsService {
    * Query opcional `inactiveDays` (30|60|90) para campanhas futuras (respeitar marketingOptIn no envio).
    * Com `segment`: resolve IDs no tenant (groupBy COMPLETED + regras) e só então pagina — total correto.
    * Sem `segment`: pagina no DB e agrega métricas só da página (barato).
+   * MEMBER: só clientes com pelo menos um agendamento deste profissional.
    */
   async list(
     tenantId: string,
     search?: string,
     pageInput = 1,
     pageSizeInput = DEFAULT_PAGE_SIZE,
-    opts?: { segment?: ClientSegment; inactiveDays?: InactiveBucket },
+    opts?: {
+      segment?: ClientSegment;
+      inactiveDays?: InactiveBucket;
+      actor?: { userId: string; role: string };
+    },
   ) {
     const now = new Date();
     const page = normalizePage(pageInput);
     const pageSize = normalizePageSize(pageSizeInput);
+    const scopeProfessionalId = opts?.actor?.role === 'MEMBER' ? opts.actor.userId : undefined;
 
     const where: Prisma.ClientWhereInput = {
       tenantId,
       deletedAt: null,
+      ...(scopeProfessionalId
+        ? { appointments: { some: { professionalId: scopeProfessionalId } } }
+        : {}),
       ...(search
         ? {
             OR: [
@@ -164,12 +173,23 @@ export class ClientsService {
     return { total, page, pageSize, items };
   }
 
-  async detail(tenantId: string, id: string) {
+  async detail(tenantId: string, id: string, opts?: { actor?: { userId: string; role: string } }) {
     const now = new Date();
+    const scopeProfessionalId = opts?.actor?.role === 'MEMBER' ? opts.actor.userId : undefined;
+
+    if (scopeProfessionalId) {
+      const linked = await this.prisma.appointment.findFirst({
+        where: { tenantId, clientId: id, professionalId: scopeProfessionalId },
+        select: { id: true },
+      });
+      if (!linked) throw new NotFoundException('Cliente não encontrado');
+    }
+
     const client = await this.prisma.client.findFirst({
       where: { id, tenantId, deletedAt: null },
       include: {
         appointments: {
+          where: scopeProfessionalId ? { professionalId: scopeProfessionalId } : undefined,
           orderBy: { startsAt: 'desc' },
           take: 50,
           select: {

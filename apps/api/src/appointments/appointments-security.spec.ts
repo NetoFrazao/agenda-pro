@@ -263,6 +263,10 @@ describe('AppointmentsService — updateStatus PIX gate + PAST_DUE book', () => 
               findMany: jest.fn().mockResolvedValue([]),
               update: jest.fn(),
             },
+            waitlistEntry: {
+              findFirst: jest.fn().mockResolvedValue(null),
+              updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+            },
           }),
         ),
         user: {

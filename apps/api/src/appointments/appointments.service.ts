@@ -92,6 +92,7 @@ export class AppointmentsService {
   /**
    * Lista paginada (default pageSize=100, max=100).
    * Breaking: resposta deixa de ser array cru → `{ items, total, page, pageSize }`.
+   * MEMBER: sempre restrito a `professionalId === actor.userId` (ignora filtro alheio).
    */
   async list(
     tenantId: string,
@@ -101,12 +102,19 @@ export class AppointmentsService {
       professionalId?: string;
       page?: number;
       pageSize?: number;
+      /** Escopo AuthZ — MEMBER só vê a própria agenda */
+      actor?: { userId: string; role: string };
     } = {},
   ): Promise<PageResult<AppointmentListItem>> {
     const page = normalizePage(opts.page);
     const pageSize = normalizePageSize(opts.pageSize, DEFAULT_APPOINTMENTS_PAGE_SIZE);
     const where: Prisma.AppointmentWhereInput = { tenantId };
-    if (opts.professionalId) where.professionalId = opts.professionalId;
+    const isMember = opts.actor?.role === 'MEMBER';
+    if (isMember && opts.actor) {
+      where.professionalId = opts.actor.userId;
+    } else if (opts.professionalId) {
+      where.professionalId = opts.professionalId;
+    }
     if (opts.from || opts.to) {
       where.startsAt = {};
       if (opts.from) where.startsAt.gte = new Date(opts.from);
@@ -929,7 +937,8 @@ export class AppointmentsService {
       throw error;
     }
 
-    // Horário antigo abriu: avisa o próximo da lista de espera e reenvia confirmação
+    // Horário antigo abriu: invalida lembretes do slot antigo, avisa waitlist e reenvia confirmação
+    await this.notifications.cancelPendingForAppointment(appointment.id);
     await notifyNextWaitlistCandidate(
       this.prisma,
       this.notifications,

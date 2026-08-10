@@ -1,3 +1,4 @@
+import { randomBytes } from 'crypto';
 import {
   Body,
   Controller,
@@ -12,6 +13,8 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import type { Request, Response } from 'express';
 import { CurrentUser, AuthUser } from '../common/decorators/current-user.decorator';
+import { CsrfGuard } from '../common/decorators/csrf.guard';
+import { CSRF_COOKIE } from '../common/decorators/csrf.constants';
 import { ttlToMs } from '../common/crypto/tokens';
 import { EnvService } from '../config/env.service';
 import { AuthService } from './auth.service';
@@ -23,9 +26,9 @@ import {
   ResetPasswordDto,
 } from './dto/auth.dto';
 import { JwtAuthGuard } from './jwt-auth.guard';
+import { ACCESS_COOKIE, REFRESH_COOKIE } from './auth.cookies';
 
-export const ACCESS_COOKIE = 'ap_access';
-export const REFRESH_COOKIE = 'ap_refresh';
+export { ACCESS_COOKIE, REFRESH_COOKIE } from './auth.cookies';
 
 type TokenPair = { accessToken: string; refreshToken: string };
 
@@ -57,11 +60,35 @@ export class AuthController {
       path: '/api/auth',
       maxAge: ttlToMs(this.env.jwtRefreshTtl),
     });
+    this.setCsrfCookie(res);
+  }
+
+  /** Cookie legível (não httpOnly) para double-submit CSRF no SPA. */
+  private setCsrfCookie(res: Response, token = randomBytes(32).toString('base64url')) {
+    const secure = this.env.nodeEnv === 'production';
+    res.cookie(CSRF_COOKIE, token, {
+      httpOnly: false,
+      secure,
+      sameSite: 'lax',
+      path: '/',
+      maxAge: ttlToMs(this.env.jwtAccessTtl),
+    });
+    return token;
   }
 
   private clearAuthCookies(res: Response) {
     res.clearCookie(ACCESS_COOKIE, { path: '/' });
     res.clearCookie(REFRESH_COOKIE, { path: '/api/auth' });
+    res.clearCookie(CSRF_COOKIE, { path: '/' });
+  }
+
+  @Get('csrf')
+  @ApiOperation({
+    summary: 'Emite/renova token CSRF (cookie ap_csrf + body.csrfToken)',
+  })
+  csrf(@Res({ passthrough: true }) res: Response) {
+    const csrfToken = this.setCsrfCookie(res);
+    return { csrfToken };
   }
 
   @Post('register')
@@ -84,6 +111,7 @@ export class AuthController {
   }
 
   @Post('refresh')
+  @UseGuards(CsrfGuard)
   @ApiOperation({ summary: 'Rotaciona refresh token (body ou cookie)' })
   async refresh(
     @Body() dto: RefreshDto,
@@ -100,6 +128,7 @@ export class AuthController {
   }
 
   @Post('logout')
+  @UseGuards(CsrfGuard)
   @ApiOperation({ summary: 'Revoga refresh token e limpa cookies' })
   async logout(
     @Body() dto: RefreshDto,
