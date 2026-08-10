@@ -16,7 +16,7 @@ export default function HomePage() {
             <h1 className="mt-8 max-w-xl font-display text-3xl font-semibold leading-[1.1] text-white text-balance animate-fade-up-delay-1 sm:text-4xl lg:text-[2.75rem]">
               Sua cadeira cheia. Sem sumiço no WhatsApp.
             </h1>
-            <p className="mt-5 max-w-md text-base leading-relaxed text-white/60 animate-fade-up-delay-2 sm:text-lg">
+            <p className="mt-5 max-w-md text-base leading-relaxed text-white/70 animate-fade-up-delay-2 sm:text-lg">
               Link público de agendamento, lembrete automático e sinal no PIX — feito para barbeiros
               e manicures.
             </p>
@@ -45,7 +45,7 @@ export default function HomePage() {
             <div className="relative animate-float overflow-hidden rounded-[1.75rem] glass-dark p-5 shadow-[0_40px_100px_-40px_rgba(0,0,0,0.8)] sm:p-6">
               <div className="mb-5 flex items-center justify-between gap-3">
                 <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/40">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/55">
                     Hoje
                   </p>
                   <p className="mt-1 font-display text-xl font-semibold text-white">
@@ -71,7 +71,7 @@ export default function HomePage() {
                       <p className="font-mono text-sm text-mint-glow">{row.time}</p>
                       <p className="mt-0.5 text-sm text-white/85">{row.name}</p>
                     </div>
-                    <span className="text-[11px] font-medium text-white/45">{row.status}</span>
+                    <span className="text-[11px] font-medium text-white/65">{row.status}</span>
                   </div>
                 ))}
               </div>
@@ -79,7 +79,7 @@ export default function HomePage() {
               <div className="mt-5 rounded-2xl bg-gradient-to-r from-mint/20 via-mint/5 to-transparent p-4 ring-1 ring-mint/25">
                 <p className="text-xs font-medium text-mint-glow">WhatsApp · lembrete 2h antes</p>
                 <p className="mt-1 text-sm text-white/70">
-                  “Oi João! Seu horário na Barbearia Norte é às 09:30. Confirme aqui →”
+                  “Oi João! Seu agendamento na Barbearia Norte é às 09:30. Confirme aqui →”
                 </p>
               </div>
             </div>
@@ -105,7 +105,7 @@ export default function HomePage() {
             ].map((item) => (
               <div key={item.title}>
                 <h2 className="font-display text-xl font-semibold text-white">{item.title}</h2>
-                <p className="mt-3 text-sm leading-relaxed text-white/55">{item.body}</p>
+                <p className="mt-3 text-sm leading-relaxed text-white/65">{item.body}</p>
               </div>
             ))}
           </div>

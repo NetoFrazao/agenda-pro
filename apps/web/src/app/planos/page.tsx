@@ -100,11 +100,7 @@ export default function PlanosPage() {
                       : 'surface-elevated'
                   }`}
                 >
-                  {isFeatured ? (
-                    <Badge tone="emerald">
-                      <span className="text-mint">Mais popular</span>
-                    </Badge>
-                  ) : null}
+                  {isFeatured ? <Badge tone="emerald">Mais popular</Badge> : null}
                   <h2
                     className={`mt-2 font-display text-2xl font-semibold ${isFeatured ? 'text-white' : 'text-ink'}`}
                   >
@@ -116,7 +112,7 @@ export default function PlanosPage() {
                     >
                       {formatBRL(price)}
                       <span
-                        className={`text-base font-normal ${isFeatured ? 'text-white/50' : 'text-muted'}`}
+                        className={`text-base font-normal ${isFeatured ? 'text-white/65' : 'text-muted'}`}
                       >
                         /mês
                       </span>
@@ -124,7 +120,7 @@ export default function PlanosPage() {
                   ) : null}
                   {plan.description ? (
                     <p
-                      className={`mt-3 text-sm leading-relaxed ${isFeatured ? 'text-white/60' : 'text-muted'}`}
+                      className={`mt-3 text-sm leading-relaxed ${isFeatured ? 'text-white/70' : 'text-muted'}`}
                     >
                       {plan.description}
                     </p>

@@ -20,9 +20,9 @@
   --color-mint-hover: #0b5f58;
   --color-mint-glow: #5eead4;
   --color-brass: #d4b483;
-  --color-muted: #6b736e;
-  /* AA floor on paper; placeholders stay secondary but readable */
-  --color-muted-soft: #6b736e;
+  /* AA ≥4.5:1 on paper (#f4f6f3); was #6b736e ≈4.49 */
+  --color-muted: #646c67;
+  --color-muted-soft: #646c67;
   --color-line: #d5dbd6;
   --color-line-soft: #c9d0cb;
   --color-danger: #b91c1c;
@@ -129,6 +129,14 @@
   :focus-visible {
     outline: 2px solid var(--color-mint-deep);
     outline-offset: 2px;
+  }
+
+  /* Prefer this on custom controls that also set ring — kills double outline */
+  .focus-ring:focus-visible {
+    outline: none;
+    box-shadow:
+      0 0 0 2px var(--color-paper),
+      0 0 0 4px var(--color-mint-deep);
   }
 
   ::selection {

@@ -55,7 +55,7 @@ export function Button({
       type={type}
       disabled={disabled || loading}
       aria-busy={loading || undefined}
-      className={`inline-flex items-center justify-center gap-2 font-semibold tracking-tight transition duration-150 disabled:cursor-not-allowed ${buttonVariants[variant]} ${buttonSizes[size]} ${fullWidth ? 'w-full' : ''} ${className}`}
+      className={`focus-ring inline-flex items-center justify-center gap-2 font-semibold tracking-tight transition duration-150 disabled:cursor-not-allowed ${buttonVariants[variant]} ${buttonSizes[size]} ${fullWidth ? 'w-full' : ''} ${className}`}
       {...props}
     >
       {loading ? <Loader2 className="size-3.5 shrink-0 animate-spin opacity-80" aria-hidden /> : null}
@@ -103,7 +103,7 @@ export function Field({ label, id, hint, error, children }: FieldProps) {
 }
 
 const controlClass =
-  'w-full min-h-11 rounded-xl border border-line bg-white px-3.5 py-2.5 text-sm text-ink placeholder:text-muted-soft shadow-[var(--shadow-inset-control)] transition focus-visible:border-mint-deep focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-mint-deep/40 disabled:bg-paper-2';
+  'w-full min-h-11 rounded-xl border border-line bg-white px-3.5 py-2.5 text-sm text-ink placeholder:text-muted-soft shadow-[var(--shadow-inset-control)] transition focus-visible:border-mint-deep focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-mint-deep/35 disabled:bg-paper-2';
 
 export function Input({ className = '', id, ...props }: InputHTMLAttributes<HTMLInputElement>) {
   return <input id={id} className={`${controlClass} ${className}`} {...props} />;
@@ -309,7 +309,7 @@ const badgeTones: Record<BadgeTone, string> = {
 export function Badge({ tone = 'stone', children }: { tone?: BadgeTone; children: ReactNode }) {
   return (
     <span
-      className={`inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-semibold tracking-wide ${badgeTones[tone]}`}
+      className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs font-semibold tracking-wide ${badgeTones[tone]}`}
     >
       {children}
     </span>
@@ -384,7 +384,7 @@ export function Modal({
             type="button"
             onClick={onClose}
             aria-label="Fechar"
-            className="touch-target inline-flex items-center justify-center rounded-lg text-muted hover:bg-paper hover:text-ink"
+            className="focus-ring touch-target inline-flex items-center justify-center rounded-lg text-muted hover:bg-paper hover:text-ink"
           >
             <X className="size-5" aria-hidden strokeWidth={2} />
           </button>

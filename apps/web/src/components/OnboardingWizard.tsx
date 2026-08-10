@@ -74,14 +74,15 @@ export function OnboardingWizard({
               <button
                 type="button"
                 onClick={() => setStep(s.n)}
-                className={`inline-flex min-h-9 items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition ${
+                className={`focus-ring inline-flex min-h-9 items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition ${
                   step === s.n
                     ? 'bg-mint text-ink'
                     : s.done
                       ? 'bg-white/15 text-white'
-                      : 'bg-white/5 text-white/60 hover:bg-white/10'
+                      : 'bg-white/5 text-white/65 hover:bg-white/10'
                 }`}
                 aria-current={step === s.n ? 'step' : undefined}
+                aria-label={`Passo ${s.n}: ${s.title}`}
               >
                 <span
                   className={`flex size-5 items-center justify-center rounded-md text-[10px] font-bold ${

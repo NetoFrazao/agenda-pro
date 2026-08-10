@@ -14,6 +14,7 @@ export { OnboardingWizard } from './OnboardingWizard';
 export { CopyButton, PixBlock } from './pix';
 export { SiteFooter, SiteHeader } from './SiteChrome';
 export { SlotListbox } from './SlotListbox';
+export { DateChipListbox, type DateChip } from './DateChipListbox';
 export {
   Toast,
   ToastProvider,

@@ -7,6 +7,7 @@ import {
   BrandLogo,
   Button,
   CopyButton,
+  DateChipListbox,
   EmptyState,
   Field,
   Input,
@@ -96,9 +97,9 @@ function StepPills({
             <li key={s.id} className="shrink-0">
               <button
                 type="button"
-                disabled={!s.complete}
+                disabled={!s.complete && !s.current}
                 onClick={() => onJump(s.id)}
-                className={`inline-flex min-h-11 items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold tracking-tight transition focus-visible:ring-2 focus-visible:ring-mint-deep disabled:cursor-default ${
+                className={`focus-ring inline-flex min-h-11 items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold tracking-tight transition disabled:cursor-default ${
                   s.current
                     ? 'bg-ink text-white shadow-[var(--shadow-primary)]'
                     : s.complete
@@ -133,7 +134,7 @@ function ServiceCard({ service, onSelect }: { service: Service; onSelect: () => 
   return (
     <button
       type="button"
-      className="surface-elevated group min-h-11 w-full rounded-2xl p-5 text-left transition hover:shadow-[var(--shadow-dropdown)] focus-visible:ring-2 focus-visible:ring-mint-deep"
+      className="surface-elevated focus-ring group min-h-11 w-full rounded-2xl p-5 text-left transition hover:shadow-[var(--shadow-dropdown)]"
       onClick={onSelect}
     >
       <div className="flex items-start justify-between gap-4">
@@ -171,7 +172,7 @@ function ChoiceCard({
   return (
     <button
       type="button"
-      className="surface-elevated min-h-11 w-full rounded-2xl p-5 text-left transition hover:shadow-[var(--shadow-dropdown)] focus-visible:ring-2 focus-visible:ring-mint-deep"
+      className="surface-elevated focus-ring min-h-11 w-full rounded-2xl p-5 text-left transition hover:shadow-[var(--shadow-dropdown)]"
       onClick={onSelect}
     >
       <p className="font-display text-lg font-semibold text-ink">{title}</p>
@@ -397,7 +398,7 @@ export function PublicBookingClient({ slug }: { slug: string }) {
       setStep('done');
       toast.success(
         result.pix ? 'Pedido recebido' : 'Horário reservado!',
-        result.pix ? 'Pague o sinal para confirmar.' : 'Guarde o link para gerenciar seu horário.',
+        result.pix ? 'Pague o sinal para confirmar.' : 'Guarde o link para gerenciar seu agendamento.',
       );
     } catch (err) {
       if (err instanceof ApiError && err.status === 409) {
@@ -611,40 +612,7 @@ export function PublicBookingClient({ slug }: { slug: string }) {
 
             <div className="mt-5">
               <p className="mb-2 text-sm font-medium text-ink-soft">Escolha o dia</p>
-              <div
-                role="listbox"
-                aria-label="Dias disponíveis"
-                className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-              >
-                {dateChips.map((chip) => {
-                  const selected = date === chip.ymd;
-                  return (
-                    <button
-                      key={chip.ymd}
-                      type="button"
-                      role="option"
-                      aria-selected={selected}
-                      onClick={() => selectDate(chip.ymd)}
-                      className={`flex min-h-11 min-w-[4.25rem] shrink-0 flex-col items-center justify-center rounded-2xl px-3 py-2 text-center transition focus-visible:ring-2 focus-visible:ring-mint-deep ${
-                        selected
-                          ? 'bg-ink text-white shadow-[var(--shadow-primary)]'
-                          : 'bg-white text-ink ring-1 ring-line hover:ring-mint-deep/40'
-                      }`}
-                    >
-                      <span
-                        className={`text-[10px] font-semibold uppercase tracking-wide ${
-                          selected ? 'text-mint' : 'text-muted'
-                        }`}
-                      >
-                        {chip.hint}
-                      </span>
-                      <span className="font-display text-lg font-semibold leading-tight">
-                        {chip.dayNum}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
+              <DateChipListbox chips={dateChips} value={date} onChange={selectDate} />
               <div className="mt-3 max-w-xs">
                 <Field label="Outra data" id="booking-date">
                   <Input
@@ -871,15 +839,15 @@ export function PublicBookingClient({ slug }: { slug: string }) {
                 </h1>
                 <p className="mt-2 text-sm leading-relaxed text-muted">
                   {bookResult.pix
-                    ? 'Recebemos seu pedido. O horário fica confirmado depois do PIX.'
-                    : `${profile.name} já recebeu seu horário. Guarde o link abaixo para remarcar ou cancelar.`}
+                    ? 'Recebemos seu pedido. O agendamento fica confirmado depois do PIX.'
+                    : `${profile.name} já recebeu seu agendamento. Guarde o link abaixo para remarcar ou cancelar.`}
                 </p>
               </div>
             </div>
 
             {bookResult.pix ? (
               <Alert tone="info">
-                O horário só é confirmado após o pagamento do sinal via PIX.
+                O agendamento só é confirmado após o pagamento do sinal via PIX.
               </Alert>
             ) : null}
 
@@ -931,7 +899,7 @@ export function PublicBookingClient({ slug }: { slug: string }) {
                 qrCodeBase64={bookResult.pix.qrCodeBase64}
                 expiresAt={bookResult.pix.expiresAt}
                 timezone={timezone}
-                note="O horário só é confirmado após o pagamento do sinal."
+                note="O agendamento só é confirmado após o pagamento do sinal."
               />
             ) : null}
 
@@ -949,7 +917,7 @@ export function PublicBookingClient({ slug }: { slug: string }) {
               <div className="mt-4 flex flex-wrap items-center gap-3">
                 <a
                   href={bookResult.manageUrl}
-                  className="break-all text-sm font-semibold text-mint hover:underline"
+                  className="break-all text-sm font-semibold text-mint-glow hover:underline"
                 >
                   Abrir meu agendamento
                 </a>
