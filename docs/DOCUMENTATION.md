@@ -23,7 +23,8 @@
 | [DATABASE](../DATABASE.md) | Prisma, índices, migrations |
 | [BACKUP](../BACKUP.md) | Backup agendado + drill |
 | [DISASTER-RECOVERY](../DISASTER-RECOVERY.md) | RPO/RTO e runbooks |
-| [Sentry stub](./ops/SENTRY.md) | Observabilidade (SDK pendente) |
+| [Sentry](./ops/SENTRY.md) | Observabilidade (SDK API + Web) |
+| [SCORECARD Observabilidade](./reviews/SCORECARD_OBSERVABILITY.md) | Nota Sentry / Trivy / source maps |
 | [SCORECARD DevOps](./reviews/SCORECARD_DEVOPS.md) | Nota ops |
 
 ## Segurança, produto e qualidade
