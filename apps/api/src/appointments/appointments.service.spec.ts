@@ -190,12 +190,12 @@ describe('AppointmentsService — orquestração notifications / FSM', () => {
       cache as never,
     );
 
-    await expect(service.updateStatus('t1', 'a1', AppointmentStatus.CANCELLED)).resolves.toMatchObject(
-      {
-        id: 'a1',
-        rebookingSuggested: false,
-      },
-    );
+    await expect(
+      service.updateStatus('t1', 'a1', AppointmentStatus.CANCELLED),
+    ).resolves.toMatchObject({
+      id: 'a1',
+      rebookingSuggested: false,
+    });
     expect(notifications.cancelPendingForAppointment).toHaveBeenCalledWith('a1');
     expect(notifications.enqueueBookingCancelled).toHaveBeenCalledWith('a1', 'professional');
     expect(cache.invalidatePublicSlots).toHaveBeenCalledWith('x');
@@ -226,7 +226,9 @@ describe('AppointmentsService — orquestração notifications / FSM', () => {
 
     const row = { id: 'a1', status: AppointmentStatus.COMPLETED };
     const credit = jest.fn().mockResolvedValue(undefined);
-    const { notifications, cache } = baseDeps({ loyalty: { creditForCompletedAppointment: credit } });
+    const { notifications, cache } = baseDeps({
+      loyalty: { creditForCompletedAppointment: credit },
+    });
     const service = new AppointmentsService(
       {
         appointment: { findFirst },

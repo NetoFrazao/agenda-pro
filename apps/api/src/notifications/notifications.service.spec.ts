@@ -1,6 +1,5 @@
-﻿jest.mock('bullmq', () => {
+jest.mock('bullmq', () => {
   class Queue {
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     constructor(..._args: unknown[]) {}
     add = jest.fn().mockResolvedValue({ id: 'q1' });
     close = jest.fn().mockResolvedValue(undefined);
