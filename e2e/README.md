@@ -1,48 +1,52 @@
-# E2E browser (Playwright) — setup planejado
+# E2E browser (Playwright)
 
-**Status:** não instalado. `@agenda-pro/web` ainda declara `No web tests in Phase 1`.  
-Não há suite Playwright neste repositório — a cobertura de UI é **0**. Não trate este doc como coverage.
+**Status:** instalado (`@playwright/test` em `@agenda-pro/web`). Specs em `e2e/*.spec.ts`.
 
-## Por que ainda não
-
-- Smoke real (login dashboard + booking `/u/[slug]`) exige app web + API + Postgres + Redis vivos, seeds estáveis e selectors estáveis.
-- Custo de CI/flake > valor imediato enquanto os gaps de gateway (webhooks) e contrato auth na API estavam abertos.
-
-## Setup sugerido (quando for prioridade)
+## Como rodar
 
 ```bash
-# na raiz do monorepo
-npm init playwright@latest
-# ou no workspace web:
-# cd apps/web && npm i -D @playwright/test && npx playwright install
+# 1) stack local
+npm run docker:up
+npm run db:migrate
+npm run prisma:seed -w @agenda-pro/api   # dono@demo.local / SenhaDemo123! / demo-barbearia
+npm run dev:api   # :3001
+npm run dev:web   # :3000
+
+# 2) browsers (uma vez por máquina)
+npx playwright install chromium
+
+# 3) smoke live (PowerShell)
+$env:E2E_LIVE="1"
+npm run test:e2e:web
+
+# Linux/macOS
+E2E_LIVE=1 npm run test:e2e:web
 ```
 
-Config mínima sugerida: `e2e/playwright.config.ts` com `baseURL=http://localhost:3000`, `webServer` apontando para `npm run dev:web` (e API em 3001 se necessário).
+Sem `E2E_LIVE=1` os smokes **fazem skip** (exit 0) — CI unitário não exige stack.
 
-### Smoke #1 — login (rascunho)
+### Variáveis
 
-```ts
-// e2e/smoke-login.spec.ts  (NÃO existe ainda — exemplo)
-import { test, expect } from '@playwright/test';
+| Var | Default |
+|-----|---------|
+| `E2E_BASE_URL` | `http://localhost:3000` |
+| `E2E_API_URL` | `http://localhost:3001` |
+| `E2E_EMAIL` | `dono@demo.local` |
+| `E2E_PASSWORD` | `SenhaDemo123!` |
+| `E2E_TENANT_SLUG` | `demo-barbearia` |
 
-test('login dashboard', async ({ page }) => {
-  await page.goto('/login');
-  await page.getByLabel(/e-?mail/i).fill(process.env.E2E_EMAIL!);
-  await page.getByLabel(/senha|password/i).fill(process.env.E2E_PASSWORD!);
-  await page.getByRole('button', { name: /entrar|login/i }).click();
-  await expect(page).toHaveURL(/dashboard/);
-});
+## Specs
+
+| Arquivo | Cobertura |
+|---------|-----------|
+| `smoke-login.spec.ts` | Login → `/dashboard` |
+| `smoke-booking.spec.ts` | Fluxo público `/u/[slug]` |
+| `smoke-manage.spec.ts` | Cria via API + confirma em `/agendamento/[token]` |
+
+## API E2E (Nest/Jest, não Playwright)
+
+```bash
+npm run test:e2e -w @agenda-pro/api
 ```
 
-Pré-requisitos: usuário seed (`E2E_EMAIL` / `E2E_PASSWORD`), `docker compose up`, API+web rodando.
-
-## O que existe hoje no lugar de Playwright
-
-| Camada | Onde | O que cobre |
-|--------|------|-------------|
-| Unit webhooks MP/Stripe | `apps/api/src/payments/*.spec.ts`, `billing.service.spec.ts` | Assinatura / `constructEvent` mock |
-| Contrato auth (DTO) | `apps/api/src/auth/auth.contract.spec.ts` | Login/Register validation rules |
-| E2E API (Postgres) | `apps/api/test/booking.e2e-spec.ts` | Race booking, manage link, tenant isolation, FSM |
-
-Rodar API unit: `npm run test -w @agenda-pro/api`  
-Rodar API e2e: `npm run test:e2e -w @agenda-pro/api` (requer `DATABASE_URL` + `REDIS_URL`)
+Requer `DATABASE_URL` + `REDIS_URL`. Inclui `booking.e2e-spec.ts` e `payment-happy-path.e2e-spec.ts` (MP double).

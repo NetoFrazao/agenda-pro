@@ -127,7 +127,7 @@ describe('Booking público — concorrência (e2e)', () => {
     expect(count).toBe(1);
   });
 
-  it('cliente gerencia o agendamento pelo manage link (confirmar + cancelar bloqueado por prazo)', async () => {
+  it('cliente gerencia o agendamento pelo manage link (confirmar + cancelar com prazo ok)', async () => {
     const date = nextBusinessDay();
     const slotsRes = await request(app.getHttpServer())
       .get(`/api/public/${slug}/slots`)
@@ -173,6 +173,43 @@ describe('Booking público — concorrência (e2e)', () => {
       where: { manageToken: hashToken(token!) },
     });
     expect(cancelled?.status).toBe('CANCELLED');
+  });
+
+  it('cancelamento pelo manage link é bloqueado dentro do cancelMinHours', async () => {
+    const owner = await prisma.user.findFirst({ where: { tenantId, role: 'OWNER' } });
+    const client = await prisma.client.create({
+      data: { tenantId, name: 'Prazo Curto', phone: '11999990033' },
+    });
+    const raw = `e2e-deadline-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    await prisma.appointment.create({
+      data: {
+        tenantId,
+        professionalId: owner!.id,
+        clientId: client.id,
+        serviceId,
+        startsAt: new Date(Date.now() + 45 * 60_000),
+        endsAt: new Date(Date.now() + 75 * 60_000),
+        status: 'SCHEDULED',
+        manageToken: hashToken(raw),
+        priceCentsSnapshot: 5000,
+        durationMinutesSnapshot: 30,
+      },
+    });
+
+    const detail = await request(app.getHttpServer())
+      .get(`/api/public/appointments/${raw}`)
+      .expect(200);
+    expect(detail.body.canCancel).toBe(false);
+
+    await request(app.getHttpServer())
+      .post(`/api/public/appointments/${raw}/cancel`)
+      .send({ reason: 'tarde demais' })
+      .expect(400);
+
+    const still = await prisma.appointment.findUnique({
+      where: { manageToken: hashToken(raw) },
+    });
+    expect(still?.status).toBe('SCHEDULED');
   });
 
   it('PENDING_PAYMENT: confirm público é bloqueado sem PIX PAID', async () => {

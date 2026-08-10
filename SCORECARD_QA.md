@@ -1,42 +1,105 @@
 # SCORECARD QA — Agenda Pro
 
 **Data:** 2026-08-09  
-**Agente:** QA (testes críticos)  
-**Commit:** nenhum (conforme pedido)
+**Agente:** QA / Testes (Agente 5)  
+**Branch:** `cursor/agent-qa`  
+**Base:** `cursor/saas-hardening-crm-infra`
 
 ---
 
-## Nota geral: **6.0 / 10**
+## Nota geral: **7.4 / 10**
 
-Melhora vs. inventário prévio (~5.5): webhooks MP/Stripe e contrato auth DTO cobertos em unit.  
-**Não** sobe mais porque web continua **0 testes** e Playwright **não está instalado** (só setup documentado em `e2e/README.md`).
+Subiu de **6.0** → **7.4**: Playwright instalado de verdade + smokes (skip sem stack), suite ampla de `appointments.service` / `notifications`, happy-path MP/Stripe com doubles, `coverageThreshold` no Jest, e2e #2 alinhado + caso de prazo.
+
+**Não** sobe mais porque smokes browser **não foram executados live** neste ciclo (stack/seed não disponível no ambiente do agente) e o Nest e2e de pagamento com Postgres **não foi re-rodado** aqui (só o double unitário).
 
 ---
 
 ## Evidência de execução
 
+### Unit API
 ```
-npm run test -w @agenda-pro/api -- --no-coverage
-→ Test Suites: 23 passed, 23 total
-→ Tests:       108 passed, 108 total
+npm run test -w @agenda-pro/api -- --no-coverage --forceExit
+→ Test Suites: 27 passed, 27 total
+→ Tests:       133 passed, 133 total
 → exit 0
 ```
 
-E2E API (`test:e2e`) **não** re-rodado neste ciclo (não alterado o bootstrap e2e; booking e2e pré-existente).
+### Coverage + threshold
+```
+npm run test:cov -w @agenda-pro/api -- --forceExit
+→ All files | Stmts 37.43 | Branch 31.25 | Funcs 29.64 | Lines 37.19
+→ coverageThreshold global: branches 25 / functions 25 / lines 30 / statements 30
+→ exit 0 (threshold ok)
+```
+
+### Playwright (sem stack)
+```
+npm run test:e2e:web
+→ 3 skipped (E2E_LIVE≠1) — exit 0
+```
+
+### Nest e2e (booking + payment Postgres)
+**Não re-executado** neste ciclo (requer `DATABASE_URL` + `REDIS_URL` vivos). Specs atualizados/adicionados:
+- `apps/api/test/booking.e2e-spec.ts` (título #2 + novo caso prazo)
+- `apps/api/test/payment-happy-path.e2e-spec.ts` (MP override)
 
 ---
 
-## Tests added neste ciclo
+## Itens do backlog
 
-| Arquivo | Casos | Foco |
-|---------|-------|------|
-| `apps/api/src/payments/mercadopago.service.spec.ts` | 8 | HMAC `x-signature` válida/inválida; fail-closed prod sem secret; non-prod sem secret |
-| `apps/api/src/payments/payments.controller.spec.ts` | 4 | Gate de assinatura → não chama `getPayment`; approved confirma; amount mismatch |
-| `apps/api/src/billing/billing.service.spec.ts` *(expandido)* | +5 | `constructEvent` rejeita assinatura; checkout completed; PAST_DUE; deleted→STARTER; 503 sem config |
-| `apps/api/src/auth/auth.contract.spec.ts` | 4 | Contrato Login/Register DTO (class-validator) — substituto honesto de smoke UI |
-| `e2e/README.md` | — | Setup Playwright **planejado**; smoke login como rascunho; **sem** deps/`*.spec` browser |
+| # | Item | Status |
+|---|------|--------|
+| 1 | Playwright + smoke login / book / manage | **Feito** (deps + specs; live = skip sem `E2E_LIVE=1`) |
+| 2 | Suite ampla appointments + notifications | **Feito** |
+| 3 | Payment happy-path MP/Stripe doubles | **Feito** (unit); Nest e2e escrito, **não rodado** |
+| 4 | `coverageThreshold` Jest | **Feito** (`passWithNoTests` removido) |
+| 5 | e2e #2 título/assert desalinhados | **Feito** + teste explícito de bloqueio por prazo |
 
-**Total unit API após ciclo:** ~108 `it(` (era ~78–90 no inventário QA; delta ≈ +21 novos asserts).
+---
+
+## Tests added / alterados
+
+| Arquivo | Foco |
+|---------|------|
+| `e2e/playwright.config.ts` + `helpers.ts` + `run-live.cjs` | Setup Playwright |
+| `e2e/smoke-login.spec.ts` | Login → dashboard |
+| `e2e/smoke-booking.spec.ts` | Booking público `/u/[slug]` |
+| `e2e/smoke-manage.spec.ts` | Manage link (API book + UI confirm) |
+| `e2e/README.md` | Como rodar |
+| `apps/api/src/appointments/appointments.service.spec.ts` | cancel prazo, orquestração cancel/updateStatus, list, mask, confirm idempotente |
+| `apps/api/src/notifications/notifications.service.spec.ts` | enqueue confirmation/cancel/reset/waitlist (+ mock BullMQ) |
+| `apps/api/src/payments/payment-happy-path.spec.ts` | MP approved + Stripe checkout completed doubles |
+| `apps/api/test/payment-happy-path.e2e-spec.ts` | Nest+Postgres MP override |
+| `apps/api/test/booking.e2e-spec.ts` | Título alinhado + cancel bloqueado por prazo |
+| `apps/api/package.json` | threshold + remove `passWithNoTests` |
+| root / web `package.json` | scripts `test:e2e:web` |
+
+**Hook de teste mínimo:** `jest.mock('bullmq')` só em `notifications.service.spec.ts` (isolamento Redis — **não** muda produto).
+
+---
+
+## Como rodar
+
+```bash
+# Unit API
+npm run test:api
+npm run test:cov -w @agenda-pro/api
+
+# Nest e2e (Postgres + Redis)
+npm run docker:up
+npm run test:e2e -w @agenda-pro/api
+
+# Playwright smoke (live)
+npx playwright install chromium
+npm run docker:up && npm run db:migrate
+npm run prisma:seed -w @agenda-pro/api   # dono@demo.local / SenhaDemo123! / demo-barbearia
+npm run dev:api   # :3001
+npm run dev:web   # :3000
+npm run test:e2e:web:live
+```
+
+Credenciais demo: `dono@demo.local` / `SenhaDemo123!`, slug `demo-barbearia`.
 
 ---
 
@@ -44,13 +107,12 @@ E2E API (`test:e2e`) **não** re-rodado neste ciclo (não alterado o bootstrap e
 
 | Domínio | Antes | Agora | Nota |
 |---------|-------|-------|------|
-| MP webhook signature | ∅ | **A** (unit + controller gate) | Fechado |
-| Stripe webhook signature / handlers | ∅ / P | **A** (mock `constructEvent`) | Fechado em unit; sem Stripe real/e2e |
-| PIX lifecycle idempotência | A | A | Pré-existente |
-| Booking race / FSM / availability | A/E | A/E | Pré-existente |
-| Auth login UI | ∅ | ∅ | Playwright não existe |
-| Auth DTO contract | ∅ | **P** | Validação de shape, não HTTP login |
-| Web / Playwright | **0** | **0** | Doc only — **não fingir coverage** |
+| Playwright / web | 0 | **P** (instalado + smokes; live não validado aqui) | Skip limpo sem `E2E_LIVE` |
+| Appointments orchestration | fraca | **A** (unit) | cancel/updateStatus/list/mask |
+| Notifications enqueue | 1 caso | **A** | confirmation/reminders/cancel/waitlist/reset |
+| Payment happy-path | unit gate | **A** unit + e2e spec | Nest e2e pending run |
+| coverageThreshold | ausente | **A** | baseline conservador |
+| E2E #2 prazo | desalinhado | **A** | título + assert + caso 400 |
 
 ---
 
@@ -58,28 +120,28 @@ E2E API (`test:e2e`) **não** re-rodado neste ciclo (não alterado o bootstrap e
 
 | Critério | Peso | Score | Comentário |
 |----------|------|-------|------------|
-| Domínios críticos cobertos | 30% | **7.5** | Gateways de assinatura cobertos; orquestração appointments/notifications ainda fraca |
-| E2E / integração real | 25% | **7.0** | Mesmo `booking.e2e-spec.ts` forte; sem e2e PIX/Stripe |
-| Web / E2E browser | 15% | **0** | Phase 1; README ≠ teste |
-| Qualidade de asserts | 15% | **7.5** | HMAC + side-effect gates; auth.service.spec ainda smoke JWT |
-| Flake / CI hygiene | 15% | **6.0** | Sem coverageThreshold; `passWithNoTests` permanece |
+| Domínios críticos cobertos | 30% | **8.5** | appointments/notifications/payment doubles |
+| E2E / integração | 25% | **7.5** | booking e2e melhorado; payment e2e escrito |
+| Web / Playwright | 15% | **6.0** | instalado + skip hygiene; live não evidenciado |
+| Qualidade de asserts | 15% | **8.0** | ordem cancel→enqueue; mask PII; prazo |
+| Flake / CI hygiene | 15% | **7.5** | threshold + skip sem stack; forceExit ainda necessário (BullMQ legado em outros specs) |
 
-**Ponderado ≈ 6.0 / 10**
-
----
-
-## Gaps que permanecem (honestos)
-
-1. **Playwright / web = 0** — instalar + 1 smoke login real seria o próximo bump (~+0.8–1.2 na nota).  
-2. `appointments.service` / `notifications` orquestração ainda sem suite ampla.  
-3. Sem e2e payment happy-path com MP/Stripe test doubles.  
-4. Sem `coverageThreshold` no Jest.  
-5. E2E #2 (cancel por prazo) título/assert ainda desalinhados (pré-existente).
+**Ponderado ≈ 7.4 / 10**
 
 ---
 
-## Decisão de QA
+## Bugs encontrados (não corrigidos — fora de escopo QA)
 
-**API:** apta para regressão unitária nos caminhos críticos de pagamento (assinatura) + domínio já coberto.  
-**Produto E2E browser:** **não** aprovado — cobertura web inexistente.  
-**Scorecard:** 6.0/10 — progresso real em webhooks; sem maquiagem de Playwright.
+Nenhum bug de produto confirmado neste ciclo. Observações de teste:
+
+1. **Flake / open handles:** suites que instanciam `NotificationsService` sem mock BullMQ ainda podem logar `ECONNREFUSED` e exigir `--forceExit` (pré-existente; mitigado no novo spec via `jest.mock('bullmq')`).
+2. **Playwright live:** não validado aqui — se seed/slots falharem, `smoke-booking` / `smoke-manage` podem flake por calendário/fim de semana (specs já pulam domingo/sábado na data).
+
+---
+
+## Pendências honestas
+
+1. Rodar `npm run test:e2e:web:live` com stack + seed e colar evidência.
+2. Rodar `npm run test:e2e -w @agenda-pro/api` (booking + payment Nest) com Postgres/Redis.
+3. Subir `coverageThreshold` gradualmente (funcs ~29.6 — margem pequena acima de 25).
+4. Opcional: mock BullMQ global no Jest setup para acabar com `--forceExit`.

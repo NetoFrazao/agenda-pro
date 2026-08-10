@@ -10,7 +10,7 @@
     "start:prod": "node dist/main.js",
     "start:worker": "node dist/worker.js",
     "lint": "eslint \"{src,test,prisma}/**/*.{ts,js}\" --max-warnings=0",
-    "test": "jest --passWithNoTests",
+    "test": "jest",
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
     "test:e2e": "jest --config ./test/jest-e2e.json --runInBand",
@@ -88,9 +88,21 @@
       "^.+\\.(t|j)s$": "ts-jest"
     },
     "collectCoverageFrom": [
-      "src/**/*.(t|j)s"
+      "src/**/*.(t|j)s",
+      "!src/main.ts",
+      "!src/worker.ts",
+      "!src/**/*.module.ts",
+      "!src/prisma/seed.ts"
     ],
     "coverageDirectory": "./coverage",
+    "coverageThreshold": {
+      "global": {
+        "branches": 25,
+        "functions": 25,
+        "lines": 30,
+        "statements": 30
+      }
+    },
     "testEnvironment": "node",
     "moduleNameMapper": {
       "^@/(.*)$": "<rootDir>/src/$1"
