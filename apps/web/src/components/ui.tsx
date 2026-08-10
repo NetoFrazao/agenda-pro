@@ -3,7 +3,6 @@
 import {
   cloneElement,
   isValidElement,
-  useEffect,
   useId,
   useRef,
   type ButtonHTMLAttributes,
@@ -14,6 +13,7 @@ import {
   type TextareaHTMLAttributes,
 } from 'react';
 import { APPOINTMENT_STATUS_LABEL, APPOINTMENT_STATUS_TONE, type BadgeTone } from '@/lib/format';
+import { useFocusTrap } from '@/lib/useFocusTrap';
 
 type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: 'primary' | 'secondary' | 'danger' | 'ghost' | 'dark';
@@ -309,15 +309,6 @@ export function Stars({ value, size = 'sm' }: { value: number; size?: 'sm' | 'lg
   );
 }
 
-function getFocusable(container: HTMLElement): HTMLElement[] {
-  const nodes = container.querySelectorAll<HTMLElement>(
-    'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
-  );
-  return Array.from(nodes).filter(
-    (el) => !el.hasAttribute('disabled') && el.getAttribute('aria-hidden') !== 'true',
-  );
-}
-
 export function Modal({
   title,
   onClose,
@@ -329,52 +320,7 @@ export function Modal({
 }) {
   const titleId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
-  const onCloseRef = useRef(onClose);
-  onCloseRef.current = onClose;
-
-  useEffect(() => {
-    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-
-    const panel = panelRef.current;
-    const focusable = panel ? getFocusable(panel) : [];
-    (focusable[0] ?? panel)?.focus();
-
-    function onKeyDown(e: KeyboardEvent) {
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        onCloseRef.current();
-        return;
-      }
-      if (e.key !== 'Tab' || !panelRef.current) return;
-      const items = getFocusable(panelRef.current);
-      if (items.length === 0) {
-        e.preventDefault();
-        panelRef.current.focus();
-        return;
-      }
-      const first = items[0];
-      const last = items[items.length - 1];
-      const active = document.activeElement;
-      if (e.shiftKey) {
-        if (active === first || !panelRef.current.contains(active)) {
-          e.preventDefault();
-          last.focus();
-        }
-      } else if (active === last || !panelRef.current.contains(active)) {
-        e.preventDefault();
-        first.focus();
-      }
-    }
-
-    window.addEventListener('keydown', onKeyDown);
-    return () => {
-      window.removeEventListener('keydown', onKeyDown);
-      document.body.style.overflow = prevOverflow;
-      previous?.focus();
-    };
-  }, []);
+  useFocusTrap(panelRef, { onEscape: onClose });
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">

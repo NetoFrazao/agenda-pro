@@ -2,7 +2,8 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { useFocusTrap } from '@/lib/useFocusTrap';
 import { AuthProvider, useAuth } from './AuthProvider';
 import { BrandLogo } from './BrandLogo';
 import { Button } from './ui';
@@ -42,53 +43,17 @@ function DashboardChrome({ children }: { children: ReactNode }) {
     setMenuOpen(false);
   }, [pathname]);
 
-  useEffect(() => {
-    if (!menuOpen) return;
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
+  const closeMenu = useCallback(() => {
+    setMenuOpen(false);
+    menuButtonRef.current?.focus();
+  }, []);
 
-    const navEl = navRef.current;
-    const firstLink = navEl?.querySelector<HTMLElement>('a, button');
-    firstLink?.focus();
-
-    function focusables(): HTMLElement[] {
-      if (!navRef.current) return [];
-      return Array.from(
-        navRef.current.querySelectorAll<HTMLElement>('a[href], button:not([disabled])'),
-      );
-    }
-
-    function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        setMenuOpen(false);
-        menuButtonRef.current?.focus();
-        return;
-      }
-      if (e.key !== 'Tab' || !navRef.current) return;
-      if (window.matchMedia('(min-width: 768px)').matches) return;
-      const items = focusables();
-      if (items.length === 0) return;
-      const first = items[0];
-      const last = items[items.length - 1];
-      const active = document.activeElement;
-      if (e.shiftKey) {
-        if (active === first || !navRef.current.contains(active)) {
-          e.preventDefault();
-          last.focus();
-        }
-      } else if (active === last || !navRef.current.contains(active)) {
-        e.preventDefault();
-        first.focus();
-      }
-    }
-
-    window.addEventListener('keydown', onKey);
-    return () => {
-      window.removeEventListener('keydown', onKey);
-      document.body.style.overflow = prevOverflow;
-    };
-  }, [menuOpen]);
+  useFocusTrap(navRef, {
+    enabled: menuOpen,
+    onEscape: closeMenu,
+    restoreFocus: false,
+    mobileOnly: true,
+  });
 
   async function handleLogout() {
     setLoggingOut(true);

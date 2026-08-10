@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useCallback, useEffect, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useState, type KeyboardEvent } from 'react';
 import { useParams } from 'next/navigation';
 import { BrandLogo } from '@/components/BrandLogo';
 import { PixBlock } from '@/components/pix';
@@ -11,6 +11,7 @@ import {
   EmptyState,
   Field,
   Input,
+  Modal,
   Spinner,
   Stars,
   StatusBadge,
@@ -21,19 +22,61 @@ import { formatBRL, formatDate, formatDateTime, formatTime, todayYmd } from '@/l
 import type { ManagedAppointment, PublicSlotsResponse } from '@/lib/types';
 
 const ACTIVE_STATUSES = ['PENDING_PAYMENT', 'SCHEDULED', 'CONFIRMED'];
+const STAR_VALUES = [1, 2, 3, 4, 5] as const;
 
+/** Radiogroup com roving tabindex + setas (padrão ARIA). */
 function StarPicker({ value, onChange }: { value: number; onChange: (v: number) => void }) {
+  const active = value >= 1 && value <= 5 ? value : 1;
+
+  function focusStar(n: number) {
+    const clamped = Math.max(1, Math.min(5, n));
+    document.getElementById(`star-rating-${clamped}`)?.focus();
+  }
+
+  function onKeyDown(e: KeyboardEvent<HTMLButtonElement>, n: number) {
+    switch (e.key) {
+      case 'ArrowRight':
+      case 'ArrowUp':
+        e.preventDefault();
+        focusStar(n + 1);
+        break;
+      case 'ArrowLeft':
+      case 'ArrowDown':
+        e.preventDefault();
+        focusStar(n - 1);
+        break;
+      case 'Home':
+        e.preventDefault();
+        focusStar(1);
+        break;
+      case 'End':
+        e.preventDefault();
+        focusStar(5);
+        break;
+      case ' ':
+      case 'Enter':
+        e.preventDefault();
+        onChange(n);
+        break;
+      default:
+        break;
+    }
+  }
+
   return (
     <div role="radiogroup" aria-label="Nota de 1 a 5 estrelas" className="flex gap-1">
-      {[1, 2, 3, 4, 5].map((n) => (
+      {STAR_VALUES.map((n) => (
         <button
           key={n}
+          id={`star-rating-${n}`}
           type="button"
           role="radio"
           aria-checked={value === n}
           aria-label={`${n} estrela${n > 1 ? 's' : ''}`}
+          tabIndex={n === active ? 0 : -1}
           onClick={() => onChange(n)}
-          className={`text-3xl transition ${n <= value ? 'text-amber-500' : 'text-[#d5dbd6] hover:text-amber-400'}`}
+          onKeyDown={(e) => onKeyDown(e, n)}
+          className={`text-3xl transition ${n <= value ? 'text-amber-500' : 'text-line hover:text-amber-400'}`}
         >
           ★
         </button>
@@ -367,69 +410,70 @@ export default function ManageAppointmentPage() {
             </div>
 
             {cancelOpen ? (
-              <form
-                onSubmit={cancelAppointment}
-                className="mt-5 space-y-4 rounded-xl bg-paper-2 p-5 ring-1 ring-line"
-              >
-                <Field label="Motivo (opcional)" id="cancel-reason">
-                  <Textarea
-                    id="cancel-reason"
-                    value={cancelReason}
-                    onChange={(e) => setCancelReason(e.target.value)}
-                    maxLength={255}
-                  />
-                </Field>
-                <div className="flex flex-wrap gap-2">
-                  <Button type="submit" variant="danger" disabled={busy !== null}>
-                    {busy === 'cancel' ? 'Cancelando…' : 'Confirmar cancelamento'}
-                  </Button>
-                  <Button type="button" variant="ghost" onClick={() => setCancelOpen(false)}>
-                    Voltar
-                  </Button>
-                </div>
-              </form>
+              <Modal title="Cancelar agendamento" onClose={() => setCancelOpen(false)}>
+                <form onSubmit={cancelAppointment} className="space-y-4">
+                  <Field label="Motivo (opcional)" id="cancel-reason">
+                    <Textarea
+                      id="cancel-reason"
+                      value={cancelReason}
+                      onChange={(e) => setCancelReason(e.target.value)}
+                      maxLength={255}
+                    />
+                  </Field>
+                  <div className="flex flex-wrap gap-2">
+                    <Button type="submit" variant="danger" disabled={busy !== null}>
+                      {busy === 'cancel' ? 'Cancelando…' : 'Confirmar cancelamento'}
+                    </Button>
+                    <Button type="button" variant="ghost" onClick={() => setCancelOpen(false)}>
+                      Voltar
+                    </Button>
+                  </div>
+                </form>
+              </Modal>
             ) : null}
 
             {rescheduleOpen ? (
-              <div className="mt-5 space-y-4 rounded-xl bg-paper-2 p-5 ring-1 ring-line">
-                <div className="max-w-xs">
-                  <Field label="Nova data" id="new-date">
-                    <Input
-                      id="new-date"
-                      type="date"
-                      min={todayYmd()}
-                      value={newDate}
-                      onChange={(e) => setNewDate(e.target.value)}
+              <Modal title="Remarcar horário" onClose={() => setRescheduleOpen(false)}>
+                <div className="space-y-4">
+                  <div className="max-w-xs">
+                    <Field label="Nova data" id="new-date">
+                      <Input
+                        id="new-date"
+                        type="date"
+                        min={todayYmd()}
+                        value={newDate}
+                        onChange={(e) => setNewDate(e.target.value)}
+                      />
+                    </Field>
+                  </div>
+                  {slotsLoading ? (
+                    <Spinner label="Buscando horários…" />
+                  ) : slots.length === 0 ? (
+                    <EmptyState>Nenhum horário livre neste dia. Tente outra data.</EmptyState>
+                  ) : (
+                    <SlotListbox
+                      slots={slots}
+                      value={newSlot}
+                      onChange={setNewSlot}
+                      timezone={timezone}
+                      label="Novos horários disponíveis"
+                      className="grid grid-cols-3 gap-2 sm:grid-cols-4"
                     />
-                  </Field>
+                  )}
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      disabled={!newSlot || busy !== null}
+                      onClick={() => void reschedule()}
+                    >
+                      {busy === 'reschedule' ? 'Remarcando…' : 'Confirmar novo horário'}
+                    </Button>
+                    <Button type="button" variant="ghost" onClick={() => setRescheduleOpen(false)}>
+                      Voltar
+                    </Button>
+                  </div>
                 </div>
-                {slotsLoading ? (
-                  <Spinner label="Buscando horários…" />
-                ) : slots.length === 0 ? (
-                  <EmptyState>Nenhum horário livre neste dia. Tente outra data.</EmptyState>
-                ) : (
-                  <SlotListbox
-                    slots={slots}
-                    value={newSlot}
-                    onChange={setNewSlot}
-                    timezone={timezone}
-                    label="Novos horários disponíveis"
-                    className="grid grid-cols-3 gap-2 sm:grid-cols-4"
-                  />
-                )}
-                <div className="flex flex-wrap gap-2">
-                  <Button
-                    type="button"
-                    disabled={!newSlot || busy !== null}
-                    onClick={() => void reschedule()}
-                  >
-                    {busy === 'reschedule' ? 'Remarcando…' : 'Confirmar novo horário'}
-                  </Button>
-                  <Button type="button" variant="ghost" onClick={() => setRescheduleOpen(false)}>
-                    Voltar
-                  </Button>
-                </div>
-              </div>
+              </Modal>
             ) : null}
           </section>
         ) : null}
