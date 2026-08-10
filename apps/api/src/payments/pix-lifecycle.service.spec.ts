@@ -1,6 +1,12 @@
 import { AppointmentStatus, PixChargeStatus } from '@prisma/client';
 import { PixLifecycleService } from './pix-lifecycle.service';
 
+function mockCache(lockResult: 'acquired' | 'busy' | 'unavailable' = 'acquired') {
+  return {
+    tryAcquireLock: jest.fn().mockResolvedValue(lockResult),
+  };
+}
+
 describe('PixLifecycleService — C-02 release PENDING_PAYMENT', () => {
   it('cancela appointment PENDING_PAYMENT e expira a charge', async () => {
     const appt = {
@@ -41,6 +47,7 @@ describe('PixLifecycleService — C-02 release PENDING_PAYMENT', () => {
       {
         runsBackgroundJobs: true,
       } as never,
+      mockCache() as never,
     );
     const released = await service.releasePendingPayment('appt-1', 'PIX expirado');
 
@@ -74,6 +81,7 @@ describe('PixLifecycleService — C-02 release PENDING_PAYMENT', () => {
         enqueueWaitlistSlotOpen: jest.fn(),
       } as never,
       { runsBackgroundJobs: true } as never,
+      mockCache() as never,
     );
 
     const released = await service.releasePendingPayment('appt-1', 'noop');
@@ -109,6 +117,7 @@ describe('PixLifecycleService — C-02 release PENDING_PAYMENT', () => {
       prisma as never,
       { enqueueWaitlistSlotOpen: jest.fn() } as never,
       { runsBackgroundJobs: true } as never,
+      mockCache() as never,
     );
 
     const released = await service.releasePendingPayment('appt-bypass', 'PIX expirado');
@@ -146,6 +155,7 @@ describe('PixLifecycleService — webhook idempotency (confirmPaid)', () => {
       {
         runsBackgroundJobs: true,
       } as never,
+      mockCache() as never,
     );
     return { service, enqueueBookingConfirmation, prisma };
   }
@@ -179,6 +189,7 @@ describe('PixLifecycleService — webhook idempotency (confirmPaid)', () => {
       prisma as never,
       { enqueueBookingConfirmation } as never,
       { runsBackgroundJobs: true } as never,
+      mockCache() as never,
     );
 
     await expect(service.confirmPaid('appt-1')).resolves.toBe('skipped');
@@ -192,8 +203,63 @@ describe('PixLifecycleService — PROCESS_ROLE gating', () => {
       {} as never,
       {} as never,
       { runsBackgroundJobs: false } as never,
+      mockCache() as never,
     );
     service.onModuleInit();
     expect((service as unknown as { timer: unknown }).timer).toBeNull();
+  });
+});
+
+describe('PixLifecycleService — distributed lock', () => {
+  it('skip reconcile quando lock busy (outro worker)', async () => {
+    const prisma = {
+      pixCharge: { findMany: jest.fn() },
+      appointment: { findMany: jest.fn() },
+    };
+    const cache = mockCache('busy');
+    const service = new PixLifecycleService(
+      prisma as never,
+      {} as never,
+      { runsBackgroundJobs: true } as never,
+      cache as never,
+    );
+
+    await expect(service.reconcileExpired()).resolves.toBe(0);
+    expect(cache.tryAcquireLock).toHaveBeenCalled();
+    expect(prisma.pixCharge.findMany).not.toHaveBeenCalled();
+  });
+
+  it('roda reconcile quando lock acquired', async () => {
+    const prisma = {
+      pixCharge: { findMany: jest.fn().mockResolvedValue([]) },
+      appointment: { findMany: jest.fn().mockResolvedValue([]) },
+    };
+    const cache = mockCache('acquired');
+    const service = new PixLifecycleService(
+      prisma as never,
+      {} as never,
+      { runsBackgroundJobs: true } as never,
+      cache as never,
+    );
+
+    await expect(service.reconcileExpired()).resolves.toBe(0);
+    expect(prisma.pixCharge.findMany).toHaveBeenCalled();
+  });
+
+  it('degrada e roda quando Redis lock unavailable', async () => {
+    const prisma = {
+      pixCharge: { findMany: jest.fn().mockResolvedValue([]) },
+      appointment: { findMany: jest.fn().mockResolvedValue([]) },
+    };
+    const cache = mockCache('unavailable');
+    const service = new PixLifecycleService(
+      prisma as never,
+      {} as never,
+      { runsBackgroundJobs: true } as never,
+      cache as never,
+    );
+
+    await expect(service.reconcileExpired()).resolves.toBe(0);
+    expect(prisma.pixCharge.findMany).toHaveBeenCalled();
   });
 });

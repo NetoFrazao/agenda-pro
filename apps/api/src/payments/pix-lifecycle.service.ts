@@ -1,11 +1,14 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { AppointmentStatus, PixChargeStatus } from '@prisma/client';
+import { PIX_RECONCILE_LOCK_KEY, RedisCacheService } from '../common/cache/redis-cache.service';
 import { notifyNextWaitlistCandidate } from '../common/waitlist/notify-next';
 import { EnvService } from '../config/env.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 const RECONCILE_INTERVAL_MS = 60_000;
+/** TTL do lock < intervalo — se o líder morrer, outro worker assume no próximo tick. */
+const RECONCILE_LOCK_TTL_SECONDS = 55;
 const FALLBACK_PENDING_TTL_MS = 30 * 60_000;
 
 export type ConfirmPaidResult = 'confirmed' | 'already_paid' | 'skipped' | 'paid_orphan';
@@ -18,6 +21,10 @@ export type ConfirmPaidResult = 'confirmed' | 'already_paid' | 'skipped' | 'paid
  * Intervalo de reconcile só sobe quando `PROCESS_ROLE` é `worker` ou `all`.
  * Em `api` (compose prod), webhook/confirmPaid/release continuam disponíveis;
  * o timer roda só no processo worker.
+ *
+ * Multi-réplica: SET NX no Redis (`lock:pix:reconcile`) — só um worker executa
+ * a consulta por janela. Se Redis estiver indisponível, degrada e roda mesmo assim
+ * (comportamento anterior; idempotente).
  */
 @Injectable()
 export class PixLifecycleService implements OnModuleInit, OnModuleDestroy {
@@ -28,6 +35,7 @@ export class PixLifecycleService implements OnModuleInit, OnModuleDestroy {
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsService,
     private readonly env: EnvService,
+    private readonly cache: RedisCacheService,
   ) {}
 
   onModuleInit() {
@@ -192,7 +200,28 @@ export class PixLifecycleService implements OnModuleInit, OnModuleDestroy {
     return updated.count > 0;
   }
 
+  /**
+   * Adquire lock distribuído (quando Redis ok) e reconcilia cobranças expiradas.
+   * Retorna 0 se outro worker já está reconciliando nesta janela.
+   */
   async reconcileExpired(): Promise<number> {
+    const lock = await this.cache.tryAcquireLock(
+      PIX_RECONCILE_LOCK_KEY,
+      RECONCILE_LOCK_TTL_SECONDS,
+    );
+    if (lock === 'busy') {
+      this.logger.debug('Reconcile PIX skipped — lock held by another worker');
+      return 0;
+    }
+    if (lock === 'unavailable') {
+      this.logger.warn('Redis lock indisponível — reconcile PIX sem leader election (degrade)');
+    }
+
+    return this.runReconcileExpired();
+  }
+
+  /** Corpo da reconciliação (sem lock) — testável isoladamente. */
+  async runReconcileExpired(): Promise<number> {
     const now = new Date();
     const expiredCharges = await this.prisma.pixCharge.findMany({
       where: {

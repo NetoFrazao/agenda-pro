@@ -58,30 +58,35 @@ export class ClientsService {
       where.id = { in: retentionClientIds.length ? retentionClientIds : ['__none__'] };
     }
 
-    // Segmento: filtrar IDs antes da paginação (corrige total/páginas da Fase 5)
+    // Segmento: filtro + paginação no SQL (sem full-scan em memória)
     if (opts?.segment) {
-      const ranked = await this.rankClientsBySegment(tenantId, where, now);
-      const matched = ranked.filter((r) => r.segment === opts.segment);
-      const total = matched.length;
-      const slice = matched.slice((page - 1) * pageSize, page * pageSize);
-      if (slice.length === 0) {
+      const idFilter =
+        where.id && typeof where.id === 'object' && 'in' in where.id
+          ? (where.id.in as string[])
+          : undefined;
+      const { ids, total } = await this.findClientIdsBySegment({
+        tenantId,
+        segment: opts.segment,
+        now,
+        page,
+        pageSize,
+        search,
+        clientIds: idFilter,
+      });
+      if (ids.length === 0) {
         return { total, page, pageSize, items: [] };
       }
 
       const clients = await this.prisma.client.findMany({
-        where: { id: { in: slice.map((s) => s.id) }, tenantId, deletedAt: null },
+        where: { id: { in: ids }, tenantId, deletedAt: null },
         include: { _count: { select: { appointments: true } } },
       });
       const byId = new Map(clients.map((c) => [c.id, c]));
-      const metrics = await this.loadClientMetrics(
-        tenantId,
-        slice.map((s) => s.id),
-        now,
-      );
+      const metrics = await this.loadClientMetrics(tenantId, ids, now);
 
-      const items = slice
-        .map((row) => {
-          const client = byId.get(row.id);
+      const items = ids
+        .map((id) => {
+          const client = byId.get(id);
           if (!client) return null;
           const m = metrics.get(client.id)!;
           return {
@@ -104,7 +109,7 @@ export class ClientsService {
             visitsPerMonth: m.visitsPerMonth,
             lastVisit: m.lastVisit,
             nextAppointmentAt: m.nextAppointmentAt,
-            segment: row.segment,
+            segment: opts.segment!,
             inactiveBucket: inactiveBucket(m.lastVisit, now),
           };
         })
@@ -325,57 +330,96 @@ export class ClientsService {
   }
 
   /**
-   * Rankeia candidatos (where já aplicado) por segmento via 1× findMany leve + 1× groupBy COMPLETED.
-   * Adequado a CRM de salão (centenas–poucos milhares); para mega-tenants, materializar depois.
+   * Filtra segmento no Postgres (CASE espelha `resolveClientSegment`) e pagina no SQL.
+   * Evita carregar todos os clientes do tenant em memória.
+   * Constantes alinhadas a `client-segment.ts`: inactive 60d, at_risk 30d, vip 10/50000, frequent 3.
    */
-  private async rankClientsBySegment(
-    tenantId: string,
-    where: Prisma.ClientWhereInput,
-    now: Date,
-  ): Promise<Array<{ id: string; createdAt: Date; segment: ClientSegment }>> {
-    const clients = await this.prisma.client.findMany({
-      where,
-      select: { id: true, createdAt: true },
-      orderBy: { createdAt: 'desc' },
-    });
-    if (clients.length === 0) return [];
+  private async findClientIdsBySegment(args: {
+    tenantId: string;
+    segment: ClientSegment;
+    now: Date;
+    page: number;
+    pageSize: number;
+    search?: string;
+    clientIds?: string[];
+  }): Promise<{ ids: string[]; total: number }> {
+    const { tenantId, segment, now, page, pageSize, search, clientIds } = args;
+    if (clientIds && clientIds.length === 0) {
+      return { ids: [], total: 0 };
+    }
 
-    const completedStats = await this.prisma.appointment.groupBy({
-      by: ['clientId'],
-      where: {
-        tenantId,
-        clientId: { in: clients.map((c) => c.id) },
-        status: AppointmentStatus.COMPLETED,
-      },
-      _max: { startsAt: true },
-      _sum: { priceCentsSnapshot: true },
-      _count: true,
-    });
-    const completedByClient = new Map(
-      completedStats.map((s) => [
-        s.clientId,
-        {
-          count: s._count,
-          spent: s._sum.priceCentsSnapshot ?? 0,
-          last: s._max.startsAt ?? null,
-        },
-      ]),
-    );
+    const inactiveCutoff = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000);
+    const atRiskCutoff = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const skip = (page - 1) * pageSize;
 
-    return clients.map((c) => {
-      const stats = completedByClient.get(c.id);
-      return {
-        id: c.id,
-        createdAt: c.createdAt,
-        segment: resolveClientSegment({
-          completedCount: stats?.count ?? 0,
-          totalSpentCents: stats?.spent ?? 0,
-          lastVisitAt: stats?.last ?? null,
-          clientCreatedAt: c.createdAt,
-          now,
-        }),
-      };
-    });
+    const searchFilter = search
+      ? Prisma.sql`AND (
+          c.name ILIKE ${`%${search}%`}
+          OR c.phone LIKE ${`%${search}%`}
+          OR (c.email IS NOT NULL AND c.email ILIKE ${`%${search}%`})
+        )`
+      : Prisma.empty;
+
+    const idFilter =
+      clientIds && clientIds.length > 0
+        ? Prisma.sql`AND c.id IN (${Prisma.join(clientIds)})`
+        : Prisma.empty;
+
+    const segmentCte = Prisma.sql`
+      WITH completed AS (
+        SELECT
+          a."clientId" AS client_id,
+          COUNT(*)::int AS completed_count,
+          COALESCE(SUM(a."priceCentsSnapshot"), 0)::int AS total_spent,
+          MAX(a."startsAt") AS last_visit
+        FROM appointments a
+        WHERE a."tenantId" = ${tenantId}
+          AND a.status = 'COMPLETED'::"AppointmentStatus"
+        GROUP BY a."clientId"
+      ),
+      ranked AS (
+        SELECT
+          c.id,
+          c."createdAt" AS created_at,
+          CASE
+            WHEN COALESCE(comp.completed_count, 0) = 0 THEN
+              CASE
+                WHEN c."createdAt" <= ${inactiveCutoff} THEN 'inactive'
+                ELSE 'new'
+              END
+            WHEN comp.last_visit <= ${inactiveCutoff} THEN 'inactive'
+            WHEN comp.last_visit <= ${atRiskCutoff} THEN 'at_risk'
+            WHEN COALESCE(comp.completed_count, 0) >= 10
+              OR COALESCE(comp.total_spent, 0) >= 50000 THEN 'vip'
+            WHEN COALESCE(comp.completed_count, 0) >= 3
+              AND comp.last_visit > ${atRiskCutoff} THEN 'frequent'
+            ELSE 'new'
+          END AS segment
+        FROM clients c
+        LEFT JOIN completed comp ON comp.client_id = c.id
+        WHERE c."tenantId" = ${tenantId}
+          AND c."deletedAt" IS NULL
+          ${searchFilter}
+          ${idFilter}
+      )
+    `;
+
+    const [countRows, pageRows] = await Promise.all([
+      this.prisma.$queryRaw<Array<{ total: bigint | number }>>`
+        ${segmentCte}
+        SELECT COUNT(*)::bigint AS total FROM ranked WHERE segment = ${segment}
+      `,
+      this.prisma.$queryRaw<Array<{ id: string }>>`
+        ${segmentCte}
+        SELECT id FROM ranked
+        WHERE segment = ${segment}
+        ORDER BY created_at DESC
+        LIMIT ${pageSize} OFFSET ${skip}
+      `,
+    ]);
+
+    const total = Number(countRows[0]?.total ?? 0);
+    return { ids: pageRows.map((r) => r.id), total };
   }
 
   /** Agrega métricas por clientId em poucas queries (page-scoped). */
